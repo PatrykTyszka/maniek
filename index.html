@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Maniek</title>
+
+  <style>
+    body {
+      background-color: white;
+      font-family: sans-serif;
+      text-align: center;
+    }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      -webkit-user-select: none;
+      user-select: none;
+      overscroll-behavior: none;
+    }
+
+    canvas {
+      border: 2px solid #333;
+      background-color: #cdeeff;
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+      touch-action: none;
+    }
+
+    /* przyciski dotykowe dla telefonu */
+    .hidden { display: none !important; }
+
+    #touchControls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .touch-button {
+      font-size: 30px;
+      width: 90px;
+      height: 60px;
+      margin: 0 6px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background-color: #FFE0B2;
+      touch-action: none;
+    }
+
+    #jumpButton {
+      width: 150px;
+      background-color: #E75480;
+      color: white;
+      font-size: 22px;
+    }
+
+    #petButton {
+      width: 130px;
+      background-color: #FFD3E0;
+      font-size: 18px;
+    }
+
+    #petButton:disabled {
+      background-color: #EEEEEE;
+      color: #AAAAAA;
+    }
+
+    #touchControls .pad {
+      display: inline-flex;
+      gap: 8px;
+    }
+
+    #rotateNote {
+      display: none;
+      padding: 60px 20px;
+      font-size: 20px;
+      line-height: 1.5;
+    }
+
+    /* ---- TELEFON W PIONIE: prosimy o obrocenie ---- */
+    @media (max-width: 950px) and (orientation: portrait) {
+      #rotateNote { display: block !important; }
+      h1, #topBar, #game, #touchControls { display: none !important; }
+    }
+
+    /* ---- TELEFON POZIOMO: plansza na caly ekran ---- */
+    @media (max-height: 520px) and (orientation: landscape) {
+      body {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+      }
+
+      h1, #topBar p { display: none; }
+      #topBar { margin: 0; }
+
+      #whoPlays { display: none; }   /* imie jest juz narysowane na planszy */
+
+      #backButton {
+        position: fixed;
+        top: 4px;
+        font-size: 13px;
+        z-index: 5;
+      }
+      #backButton { right: calc(8px + env(safe-area-inset-right)); padding: 2px 8px; }
+
+      /* plansza jest mniejsza, zeby guziki jej nie zaslanialy:
+         zostawiamy na dole 92 px na przyciski */
+      canvas {
+        aspect-ratio: 8 / 3;
+        width: min(100vw, calc((100vh - 92px) * 8 / 3));
+        width: min(100vw, calc((100dvh - 92px) * 8 / 3));
+        max-width: 100vw;
+        height: auto;
+        max-height: none;
+        border: none;
+      }
+
+      /* przyciski lezą na planszy, po bokach, zeby nie zabierac miejsca */
+      #touchControls {
+        position: fixed;
+        bottom: calc(6px + env(safe-area-inset-bottom));
+        left: calc(6px + env(safe-area-inset-left));
+        right: calc(6px + env(safe-area-inset-right));
+        display: flex;
+        justify-content: space-between;
+        margin: 0;
+        z-index: 4;
+      }
+
+      .touch-button {
+        width: 84px;
+        height: 74px;
+        margin: 0;
+        font-size: 28px;
+      }
+
+      #jumpButton {
+        width: 116px;
+        font-size: 18px;
+      }
+
+      #petButton {
+        width: 116px;
+        font-size: 16px;
+      }
+
+      #menu {
+        margin: 0 auto;
+        padding: 10px;
+        max-height: 95vh;
+        overflow-y: auto;
+      }
+      #menu h2 { font-size: 18px; margin: 4px; }
+      #menu h3 { font-size: 15px; margin: 6px; }
+    }
+
+    #menu {
+      max-width: 420px;
+      margin: 20px auto;
+      padding: 20px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background-color: #fff8f0;
+    }
+
+    #playerName {
+      font-size: 18px;
+      padding: 6px;
+      width: 200px;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 6px 14px;
+      margin: 4px;
+      cursor: pointer;
+    }
+
+    .player-button {
+      background-color: #E75480;
+      color: white;
+      border: none;
+      border-radius: 8px;
+    }
+
+    #game {
+      display: none;
+    }
+
+    #topBar {
+      display: none;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Maniek</h1>
+
+  <!-- ---- Menu przed gra ---- -->
+  <div id="menu">
+    <h2>Kto dzisiaj gra?</h2>
+    <input id="playerName" placeholder="Wpisz imię" maxlength="12">
+    <button id="startButton">Graj!</button>
+
+    <h3>Gracze, którzy już grali:</h3>
+    <div id="playersList">Jeszcze nikt tu nie grał.</div>
+  </div>
+
+  <!-- ---- Gra ---- -->
+  <div id="topBar">
+    <span id="whoPlays"></span>
+    <button id="backButton">Zmień gracza</button>
+    <p>SPACJA = skok, strzałki &larr; &rarr; = chodzenie w bok</p>
+  </div>
+
+  <canvas id="game" width="800" height="300"></canvas>
+
+  <!-- ---- Przyciski do grania palcem na telefonie ---- -->
+  <div id="touchControls" class="hidden">
+    <div class="pad">
+      <button class="touch-button" id="leftButton">&larr;</button>
+      <button class="touch-button" id="rightButton">&rarr;</button>
+    </div>
+    <div class="pad">
+      <button class="touch-button" id="petButton">GŁASKAJ</button>
+    </div>
+    <div class="pad">
+      <button class="touch-button" id="jumpButton">SKOK</button>
+    </div>
+  </div>
+
+  <!-- ---- Prosba o obrocenie telefonu ---- -->
+  <div id="rotateNote">
+    <p style="font-size:26px">🔄</p>
+    <p>Obróć telefon poziomo,<br>żeby grać w Mańka!</p>
+  </div>
+
+  <script>
+    // ---- Podstawowe ustawienia gry ----
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const GROUND_Y = 250;              // tu stoja lapy Manka na trawie
+    const GRASS_TOP = GROUND_Y + 14;   // powierzchnia trawy
+    const DOG_LEFT = 8;                // od tego miejsca zaczyna sie cialo Manka
+    const DOG_RIGHT = 58;              // a tu sie konczy
+    const DOG_HEIGHT = 52;             // wysokosc Manka
+    const GRAVITY = 0.5;
+    const JUMP_POWER = 12;
+    const MOVE_SPEED = 3.5;
+    const STUN_TIME = 50;
+    const PUPPY_SPEED = 1.5;
+    const START_LIVES = 3;
+    const GIRL_HOME = 690;      // gdzie Zuzia stoi na co dzien
+    const GIRL_WALK = 4;        // jak szybko Zuzia idzie do Manka
+    const PET_TIME = 90;        // jak dlugo trwa glaskanie
+    const PET_COOLDOWN = 420;   // przerwa, zanim znowu mozna pogłaskać
+    const BOOST_TIME = 480;     // jak dlugo Maniek biega szybciej
+    const BOOST_MULTIPLIER = 2; // ile razy szybciej
+
+    // ---- Piec poziomow gry ----
+    // speed      - jak szybko jedzie plansza (stala przez caly poziom)
+    // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
+    // puppies    - ile razy wybiegnie bialy piesek
+    // spawnEvery - co ile klatek pojawia sie przeszkoda
+    // types      - jakie przeszkody moga sie pojawic
+    // rocks      - czy sa skaly do przeskakiwania
+    const LEVELS = [
+      { speed: 2.5, duration: 2400, puppies: 1,  spawnEvery: 190, types: ["kupka"], rocks: false },
+      { speed: 2.9, duration: 2600, puppies: 2,  spawnEvery: 175, types: ["kupka", "buda"], rocks: false },
+      { speed: 3.3, duration: 2800, puppies: 5,  spawnEvery: 170, types: ["kupka", "buda", "krecik"], rocks: true },
+      { speed: 3.7, duration: 3000, puppies: 10, spawnEvery: 160, types: ["kupka", "buda", "krecik"], rocks: true },
+      { speed: 4.1, duration: 3200, puppies: 15, spawnEvery: 150, types: ["kupka", "buda", "krecik"], rocks: true }
+    ];
+
+    const SIZES = {
+      kupka:  { width: 22, height: 20 },
+      buda:   { width: 48, height: 52 },
+      krecik: { width: 26, height: 24 }
+    };
+
+    // ---- Maniek ----
+    const dog = {
+      x: 80,
+      y: GROUND_Y,
+      speedY: 0,
+      isJumping: false,
+      stun: 0,
+      stunKind: "",
+      invincible: 0,
+      sitting: false,   // siedzi, gdy Zuzia go glaszcze
+      boost: 0          // gdy > 0, biega szybciej po poglaskaniu
+    };
+
+    // ---- Bialy piesek ----
+    const puppy = {
+      x: 900, y: GROUND_Y, speedY: 0,
+      isJumping: false, crouchTimer: 0, active: false
+    };
+
+    // ---- Zuzia: chodzi do Manka i glaszcze go ----
+    const girl = {
+      x: GIRL_HOME,
+      state: "waiting",   // waiting -> walking -> petting -> returning
+      timer: 0
+    };
+    let petCooldown = 0;
+    let hearts = [];      // serduszka lecace do gory przy glaskaniu
+
+    // ---- Stan gry ----
+    let playerName = "";
+    let running = false;
+    let obstacles = [];
+    let rocks = [];
+    let bowls = [];
+    let puffs = [];
+    let level = 0;
+    let levelFrame = 0;       // ile klatek trwa juz ten poziom
+    let nextPuppyAt = 0;      // kiedy wybiegnie kolejny piesek
+    let puppiesSeen = 0;
+    let lives = START_LIVES;
+    let gameSpeed = LEVELS[0].speed;
+    let score = 0;
+    let bowlsCollected = 0;
+    let poopsStepped = 0;
+    let clapTimer = 0;
+    let bannerTimer = 0;
+    let bannerText = "";
+    let gameWon = false;
+    let rockCooldown = 0;     // przerwa, zeby przeszkody nie ladowaly na skalach
+    let frame = 0;
+
+    function currentLevel() {
+      return LEVELS[level];
+    }
+
+    // ================= MENU I GRACZE =================
+
+    const STORAGE_KEY = "maniek-gracze";
+
+    function loadPlayers() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function savePlayers(players) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(players));
+    }
+
+    function rememberPlayer(name, points) {
+      const players = loadPlayers();
+      const found = players.find(p => p.name === name);
+
+      if (found) {
+        found.best = Math.max(found.best, points);
+      } else {
+        players.push({ name: name, best: points });
+      }
+
+      savePlayers(players);
+    }
+
+    function showPlayersList() {
+      const list = document.getElementById("playersList");
+      const players = loadPlayers();
+      list.innerHTML = "";
+
+      if (players.length === 0) {
+        list.textContent = "Jeszcze nikt tu nie grał.";
+        return;
+      }
+
+      for (const player of players) {
+        const button = document.createElement("button");
+        button.className = "player-button";
+        button.textContent = player.name + " (" + player.best + " pkt)";
+        button.addEventListener("click", function () {
+          startGame(player.name);
+        });
+        list.appendChild(button);
+      }
+    }
+
+    function startGame(name) {
+      playerName = name;
+      document.getElementById("menu").style.display = "none";
+      document.getElementById("topBar").style.display = "block";
+      document.getElementById("game").style.display = "inline-block";
+      document.getElementById("touchControls").classList.remove("hidden");
+      document.getElementById("whoPlays").textContent = "Gra: " + name;
+
+      resetEverything();
+
+      if (!running) {
+        running = true;
+        update();
+      }
+    }
+
+    function backToMenu() {
+      rememberPlayer(playerName, Math.floor(score / 10));
+      running = false;
+      document.getElementById("menu").style.display = "block";
+      document.getElementById("topBar").style.display = "none";
+      document.getElementById("game").style.display = "none";
+      document.getElementById("touchControls").classList.add("hidden");
+      showPlayersList();
+    }
+
+    document.getElementById("startButton").addEventListener("click", function () {
+      const name = document.getElementById("playerName").value.trim();
+      if (name.length > 0) {
+        startGame(name);
+      }
+    });
+
+    document.getElementById("playerName").addEventListener("keydown", function (event) {
+      if (event.code === "Enter") {
+        document.getElementById("startButton").click();
+      }
+    });
+
+    document.getElementById("backButton").addEventListener("click", backToMenu);
+
+    showPlayersList();
+
+    // ================= STEROWANIE =================
+
+    const keys = {};
+
+    function jump() {
+      if (gameWon) {
+        resetEverything();
+        return;
+      }
+      if (!dog.isJumping && dog.stun === 0 && !dog.sitting) {
+        dog.speedY = -JUMP_POWER;
+        dog.isJumping = true;
+      }
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (!running) {
+        return;
+      }
+      keys[event.code] = true;
+
+      if (event.code === "Space" || event.code === "ArrowUp") {
+        event.preventDefault();
+        jump();
+      }
+      if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
+        event.preventDefault();
+      }
+      if (event.code === "KeyG" || event.code === "ArrowDown") {
+        event.preventDefault();
+        startPetting();
+      }
+    });
+
+    document.addEventListener("keyup", function (event) {
+      keys[event.code] = false;
+    });
+
+    canvas.addEventListener("mousedown", jump);
+    canvas.addEventListener("touchstart", function (event) {
+      event.preventDefault();
+      jump();
+    });
+
+    // ---- Przyciski dotykowe: trzymanie strzalki dziala jak trzymanie klawisza ----
+    function holdKey(button, code) {
+      function press(event) {
+        event.preventDefault();
+        keys[code] = true;
+      }
+      function release(event) {
+        event.preventDefault();
+        keys[code] = false;
+      }
+
+      button.addEventListener("touchstart", press);
+      button.addEventListener("touchend", release);
+      button.addEventListener("touchcancel", release);
+      button.addEventListener("mousedown", press);
+      button.addEventListener("mouseup", release);
+      button.addEventListener("mouseleave", release);
+    }
+
+    holdKey(document.getElementById("leftButton"), "ArrowLeft");
+    holdKey(document.getElementById("rightButton"), "ArrowRight");
+
+    document.getElementById("jumpButton").addEventListener("touchstart", function (event) {
+      event.preventDefault();
+      jump();
+    });
+    document.getElementById("jumpButton").addEventListener("mousedown", jump);
+
+    document.getElementById("petButton").addEventListener("touchstart", function (event) {
+      event.preventDefault();
+      startPetting();
+    });
+    document.getElementById("petButton").addEventListener("mousedown", startPetting);
+
+    // ================= RYSOWANIE =================
+
+    function drawGround() {
+      ctx.fillStyle = "#4CAF50";
+      ctx.fillRect(0, GRASS_TOP, canvas.width, canvas.height - GRASS_TOP);
+    }
+
+    // ---- Dziewczynka w tle, ktora klaszcze ----
+    function drawGirl() {
+      const x = girl.x;
+      const feetY = GRASS_TOP - 4;
+      const clapping = clapTimer > 0;
+      const petting = girl.state === "petting";
+
+      ctx.fillStyle = "#F1C27D";
+      ctx.fillRect(x - 7, feetY - 16, 5, 16);
+      ctx.fillRect(x + 2, feetY - 16, 5, 16);
+
+      ctx.fillStyle = "#E75480";
+      ctx.beginPath();
+      ctx.moveTo(x, feetY - 52);
+      ctx.lineTo(x - 16, feetY - 14);
+      ctx.lineTo(x + 16, feetY - 14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#F1C27D";
+      ctx.lineWidth = 4;
+
+      if (petting) {
+        // jedna reka glaszcze Manka po glowie, w gore i w dol
+        const stroke = Math.sin(frame / 5) * 5;
+        ctx.beginPath();
+        ctx.moveTo(x - 10, feetY - 46);
+        ctx.lineTo(x - 34, feetY - 34 + stroke);
+        ctx.moveTo(x + 10, feetY - 46);
+        ctx.lineTo(x + 14, feetY - 30);
+        ctx.stroke();
+      } else {
+        const handOffset = clapping ? Math.abs(Math.sin(frame / 3)) * 12 : 10;
+        ctx.beginPath();
+        ctx.moveTo(x - 10, feetY - 46);
+        ctx.lineTo(x - handOffset, feetY - 32);
+        ctx.moveTo(x + 10, feetY - 46);
+        ctx.lineTo(x + handOffset, feetY - 32);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = "#F1C27D";
+      ctx.beginPath();
+      ctx.arc(x, feetY - 62, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#6B4423";
+      ctx.beginPath();
+      ctx.arc(x, feetY - 66, 11, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x - 13, feetY - 62, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x + 13, feetY - 62, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(x - 4, feetY - 62, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x + 4, feetY - 62, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, feetY - 60, 4, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      if (petting) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("Grzeczny piesek!", x - 50, feetY - 80);
+      } else if (clapping) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("Brawo!", x - 20, feetY - 80);
+      }
+    }
+
+    // ---- Maniek ----
+    function drawDog() {
+      // po ciosie Maniek mruga
+      if (dog.invincible > 0 && dog.stun === 0 && frame % 10 < 4) {
+        return;
+      }
+
+      ctx.fillStyle = "#8B5A2B";
+
+      const isRunning = !dog.isJumping && dog.stun === 0 && !dog.sitting;
+      const walkingBack = keys["ArrowLeft"];
+      const legSwing = isRunning ? Math.sin(frame / 5) * (walkingBack ? -6 : 6) : 0;
+
+      if (dog.sitting) {
+        // siedzi: tyl opuszczony, przednie lapy proste
+        ctx.beginPath();
+        ctx.ellipse(dog.x + 12, dog.y + 4, 16, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(dog.x + 30, dog.y - 2, 6, 16);
+      } else {
+        ctx.fillRect(dog.x + 8 + legSwing, dog.y, 6, 14);
+        ctx.fillRect(dog.x + 30 - legSwing, dog.y, 6, 14);
+      }
+
+      ctx.beginPath();
+      ctx.ellipse(dog.x + 22, dog.y - 8, 22, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // kreski predkosci, gdy Maniek jest rozpedzony po poglaskaniu
+      if (dog.boost > 0 && !dog.sitting) {
+        ctx.strokeStyle = "#FFD700";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const y = dog.y - 6 - i * 8;
+          ctx.beginPath();
+          ctx.moveTo(dog.x - 26 - (frame % 10), y);
+          ctx.lineTo(dog.x - 8 - (frame % 10), y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#8B5A2B";
+      }
+
+      ctx.beginPath();
+      ctx.arc(dog.x - 2, dog.y - 22, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(dog.x + 46, dog.y - 24, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(dog.x + 44, dog.y - 36, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#6B4423";
+      ctx.beginPath();
+      ctx.arc(dog.x + 38, dog.y - 22, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // czerwona obroza i zloty medalik
+      ctx.fillStyle = "#E00000";
+      ctx.beginPath();
+      ctx.ellipse(dog.x + 37, dog.y - 13, 6, 11, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#FFD700";
+      ctx.beginPath();
+      ctx.arc(dog.x + 40, dog.y - 3, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#8B5A2B";
+      ctx.fillRect(dog.x + 54, dog.y - 26, 12, 8);
+
+      if (dog.stun > 0 && dog.stunKind === "kupka") {
+        drawTongueFace();
+      } else if (dog.stun > 0) {
+        drawDizzyFace();
+      } else {
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(dog.x + 50, dog.y - 28, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawTongueFace() {
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(dog.x + 47, dog.y - 31);
+      ctx.lineTo(dog.x + 53, dog.y - 25);
+      ctx.moveTo(dog.x + 53, dog.y - 31);
+      ctx.lineTo(dog.x + 47, dog.y - 25);
+      ctx.stroke();
+
+      ctx.fillStyle = "#FF6699";
+      ctx.beginPath();
+      ctx.ellipse(dog.x + 62, dog.y - 14, 4, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawDizzyFace() {
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(dog.x + 50, dog.y - 28, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFD700";
+      for (let i = 0; i < 3; i++) {
+        const angle = frame / 8 + (i * Math.PI * 2) / 3;
+        ctx.beginPath();
+        ctx.arc(dog.x + 44 + Math.cos(angle) * 18, dog.y - 50 + Math.sin(angle) * 6, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ---- Bialy piesek ----
+    function drawPuppy() {
+      if (!puppy.active) {
+        return;
+      }
+
+      const squash = puppy.crouchTimer > 0 ? 0.6 : 1;
+
+      ctx.save();
+      ctx.translate(puppy.x + 28, puppy.y);
+      ctx.scale(-1, squash);
+
+      ctx.fillStyle = "white";
+      ctx.strokeStyle = "#999";
+      ctx.lineWidth = 1;
+
+      const wag = Math.sin(frame / 2) * 0.9;
+      ctx.save();
+      ctx.translate(-26, -16);
+      ctx.rotate(-0.6 + wag);
+      ctx.beginPath();
+      ctx.ellipse(-10, 0, 11, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      const legSwing = puppy.isJumping ? 0 : Math.sin(frame / 4) * 5;
+      ctx.fillRect(-22 + legSwing, 0, 5, 12);
+      ctx.fillRect(-4 - legSwing, 0, 5, 12);
+      ctx.strokeRect(-22 + legSwing, 0, 5, 12);
+      ctx.strokeRect(-4 - legSwing, 0, 5, 12);
+
+      ctx.beginPath();
+      ctx.ellipse(-10, -6, 18, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(8, -18, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#EEEEEE";
+      ctx.beginPath();
+      ctx.ellipse(2, -20, 5, 8, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.ellipse(18, -14, 7, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(12, -21, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(23, -15, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ---- Przeszkody ----
+    function drawKupka(o) {
+      ctx.fillStyle = "#5C3317";
+
+      if (o.used) {
+        ctx.beginPath();
+        ctx.ellipse(o.x + 11, GRASS_TOP - 2, 16, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+
+      ctx.beginPath();
+      ctx.ellipse(o.x + 11, GRASS_TOP - 4, 11, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(o.x + 11, GRASS_TOP - 11, 8, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(o.x + 11, GRASS_TOP - 17, 5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // buda, a w niej pies albo kot, ktory wyglada i drapie
+    function drawBuda(o) {
+      ctx.fillStyle = "#C89664";
+      ctx.fillRect(o.x, GRASS_TOP - 32, 48, 32);
+
+      ctx.fillStyle = "#B03A2E";
+      ctx.beginPath();
+      ctx.moveTo(o.x - 5, GRASS_TOP - 30);
+      ctx.lineTo(o.x + 24, GRASS_TOP - 52);
+      ctx.lineTo(o.x + 53, GRASS_TOP - 30);
+      ctx.closePath();
+      ctx.fill();
+
+      // ciemne wejscie
+      ctx.fillStyle = "#4A2C12";
+      ctx.beginPath();
+      ctx.arc(o.x + 24, GRASS_TOP - 14, 11, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(o.x + 13, GRASS_TOP - 14, 22, 14);
+
+      drawAnimalInBuda(o);
+    }
+
+    function drawAnimalInBuda(o) {
+      // zwierzak co chwile wyglada z budy i chowa sie z powrotem
+      const peek = Math.sin(o.animalPhase + frame / 30);
+      if (peek < 0) {
+        return;
+      }
+
+      const headX = o.x + 24;
+      const headY = GRASS_TOP - 8 - peek * 10;
+
+      if (o.animal === "kot") {
+        ctx.fillStyle = "#9E9E9E";
+        // uszy trojkatne
+        ctx.beginPath();
+        ctx.moveTo(headX - 9, headY - 4);
+        ctx.lineTo(headX - 6, headY - 13);
+        ctx.lineTo(headX - 1, headY - 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(headX + 9, headY - 4);
+        ctx.lineTo(headX + 6, headY - 13);
+        ctx.lineTo(headX + 1, headY - 6);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#D2A679";
+        // uszy klapniete
+        ctx.beginPath();
+        ctx.ellipse(headX - 9, headY - 2, 4, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(headX + 9, headY - 2, 4, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // glowa
+      ctx.beginPath();
+      ctx.arc(headX, headY, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      // oczy i nosek
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(headX - 3.5, headY - 2, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(headX + 3.5, headY - 2, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(headX, headY + 3, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // lapka drapiaca w sciane budy
+      const scratch = Math.sin(frame / 4) * 4;
+      ctx.fillStyle = o.animal === "kot" ? "#9E9E9E" : "#D2A679";
+      ctx.beginPath();
+      ctx.ellipse(o.x + 40, GRASS_TOP - 18 + scratch, 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // kreski, jakby drapal
+      ctx.strokeStyle = "#8B5A2B";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(o.x + 44, GRASS_TOP - 26 + i * 5);
+        ctx.lineTo(o.x + 47, GRASS_TOP - 24 + i * 5);
+        ctx.stroke();
+      }
+    }
+
+    function krecikVisible(o) {
+      return o.popTimer <= 0;
+    }
+
+    function drawKrecik(o) {
+      ctx.fillStyle = "#3E2723";
+      ctx.beginPath();
+      ctx.ellipse(o.x + 13, GRASS_TOP + 1, 15, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (!krecikVisible(o)) {
+        return;
+      }
+
+      const top = GRASS_TOP - 22;
+
+      ctx.fillStyle = "#5D4037";
+      ctx.beginPath();
+      ctx.arc(o.x + 13, top + 10, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#EFC3A0";
+      ctx.beginPath();
+      ctx.ellipse(o.x + 3, top + 16, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(o.x + 23, top + 16, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FF9AA2";
+      ctx.beginPath();
+      ctx.arc(o.x + 13, top + 12, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(o.x + 9, top + 6, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(o.x + 17, top + 6, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawObstacle(o) {
+      if (o.type === "kupka") {
+        drawKupka(o);
+      } else if (o.type === "buda") {
+        drawBuda(o);
+      } else {
+        drawKrecik(o);
+      }
+    }
+
+    // ---- Skaly, po ktorych sie skacze ----
+    function drawRock(rock) {
+      const top = GRASS_TOP - rock.height;
+
+      ctx.fillStyle = "#9E9E9E";
+      ctx.fillRect(rock.x, top, rock.width, rock.height);
+
+      // jasniejszy wierzch, zeby bylo widac, gdzie sie ladujee
+      ctx.fillStyle = "#BDBDBD";
+      ctx.fillRect(rock.x, top, rock.width, 6);
+
+      // ciemniejsze kamyki
+      ctx.fillStyle = "#7A7A7A";
+      ctx.beginPath();
+      ctx.arc(rock.x + 12, top + 20, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(rock.x + rock.width - 14, top + 32, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ---- Miski ----
+    function drawBowl(bowl) {
+      const bottom = GRASS_TOP - 2;
+
+      ctx.fillStyle = "#C68642";
+      ctx.beginPath();
+      ctx.ellipse(bowl.x + 15, bottom - 12, 12, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#2196F3";
+      ctx.beginPath();
+      ctx.moveTo(bowl.x, bottom - 13);
+      ctx.lineTo(bowl.x + 30, bottom - 13);
+      ctx.lineTo(bowl.x + 24, bottom);
+      ctx.lineTo(bowl.x + 6, bottom);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // ---- Serduszka ----
+    function drawHeart(x, y, filled) {
+      ctx.fillStyle = filled ? "#E00000" : "#DDDDDD";
+      ctx.beginPath();
+      ctx.arc(x - 5, y, 5, Math.PI, 0);
+      ctx.arc(x + 5, y, 5, Math.PI, 0);
+      ctx.lineTo(x, y + 12);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawPuffs() {
+      for (const puff of puffs) {
+        ctx.fillStyle = "rgba(255, 255, 255, " + (puff.life / 30) + ")";
+        ctx.beginPath();
+        ctx.arc(puff.x, puff.y, 10 + (30 - puff.life), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ================= LOGIKA =================
+
+    function dogBox() {
+      return {
+        left: dog.x + DOG_LEFT,
+        right: dog.x + DOG_RIGHT,
+        top: dog.y + 14 - DOG_HEIGHT,
+        bottom: dog.y + 14
+      };
+    }
+
+    function overlaps(box, left, right, top, bottom) {
+      return box.right > left && box.left < right &&
+             box.bottom > top && box.top < bottom;
+    }
+
+    // ---- Glaskanie: Zuzia podchodzi, Maniek siada, potem biegnie szybciej ----
+    function startPetting() {
+      if (girl.state !== "waiting" || petCooldown > 0) {
+        return;
+      }
+      if (dog.stun > 0 || dog.isJumping || gameWon) {
+        return;
+      }
+
+      girl.state = "walking";
+      dog.sitting = true;
+    }
+
+    function isPettingPause() {
+      // podczas dochodzenia i glaskania plansza stoi
+      return girl.state === "walking" || girl.state === "petting";
+    }
+
+    function updateGirl() {
+      if (girl.state === "walking") {
+        const target = dog.x + 92;
+        if (girl.x > target) {
+          girl.x -= GIRL_WALK;
+        } else {
+          girl.x = target;
+          girl.state = "petting";
+          girl.timer = PET_TIME;
+        }
+      } else if (girl.state === "petting") {
+        girl.timer--;
+
+        // serduszka lecace do gory
+        if (frame % 12 === 0) {
+          hearts.push({ x: dog.x + 40 + Math.random() * 20, y: dog.y - 50, life: 45 });
+        }
+
+        if (girl.timer <= 0) {
+          girl.state = "returning";
+          dog.sitting = false;
+          dog.boost = BOOST_TIME;   // nagroda za glaskanie
+        }
+      } else if (girl.state === "returning") {
+        girl.x += GIRL_WALK;
+        if (girl.x >= GIRL_HOME) {
+          girl.x = GIRL_HOME;
+          girl.state = "waiting";
+          petCooldown = PET_COOLDOWN;
+        }
+      }
+
+      if (petCooldown > 0) {
+        petCooldown--;
+      }
+    }
+
+    function drawHearts() {
+      for (const heart of hearts) {
+        ctx.globalAlpha = heart.life / 45;
+        drawHeart(heart.x, heart.y, true);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function takeHit(kind) {
+      dog.stun = STUN_TIME;
+      dog.stunKind = kind;
+      dog.invincible = STUN_TIME + 60;
+    }
+
+    // ---- Maniek traci zycie, gdy plansza zepchnie go za lewa krawedz ----
+    function loseLife() {
+      lives--;
+      bannerText = lives > 0 ? "Ojej! Zostały serduszka: " + lives : "Koniec serduszek!";
+      bannerTimer = 110;
+
+      if (lives <= 0) {
+        startLevel(level, START_LIVES);   // ten sam etap od nowa
+      } else {
+        // czyscimy teren, zeby Maniek mial gdzie wrocic
+        obstacles = [];
+        rocks = [];
+        dog.x = 80;
+        dog.y = GROUND_Y;
+        dog.speedY = 0;
+        dog.isJumping = false;
+        dog.invincible = 90;
+        rockCooldown = 150;
+      }
+    }
+
+    // ---- Ruch pionowy: skok, spadanie i ladowanie na skalach ----
+    function updateDogVertical() {
+      const prevBottom = dog.y + 14;
+
+      dog.speedY += GRAVITY;
+      dog.y += dog.speedY;
+
+      let landingY = GRASS_TOP;   // domyslnie ladujemy na trawie
+
+      for (const rock of rocks) {
+        const top = GRASS_TOP - rock.height;
+        const overRock = dog.x + DOG_RIGHT > rock.x + 4 &&
+                         dog.x + DOG_LEFT < rock.x + rock.width - 4;
+
+        if (overRock && dog.speedY >= 0 && prevBottom <= top + 2 && top < landingY) {
+          landingY = top;
+        }
+      }
+
+      if (dog.y + 14 >= landingY) {
+        dog.y = landingY - 14;
+        dog.speedY = 0;
+        dog.isJumping = false;
+      }
+    }
+
+    // ---- Skaly blokuja z boku i spychaja Manka w lewo ----
+    function pushOutOfRocks() {
+      for (const rock of rocks) {
+        const top = GRASS_TOP - rock.height;
+
+        // jesli Maniek stoi na skale, nic go nie blokuje
+        if (dog.y + 14 <= top + 4) {
+          continue;
+        }
+
+        if (dog.x + DOG_RIGHT > rock.x && dog.x + DOG_LEFT < rock.x + rock.width) {
+          const fromLeft = (dog.x + DOG_RIGHT) - rock.x;
+          const fromRight = (rock.x + rock.width) - (dog.x + DOG_LEFT);
+
+          if (fromLeft < fromRight) {
+            dog.x = rock.x - DOG_RIGHT;          // zepchniety w lewo
+          } else {
+            dog.x = rock.x + rock.width - DOG_LEFT;
+          }
+        }
+      }
+
+      if (dog.x + DOG_RIGHT < 4) {
+        loseLife();
+      }
+    }
+
+    function moveSideways() {
+      if (dog.sitting) {
+        return;   // gdy siedzi, nigdzie nie idzie
+      }
+
+      const speed = dog.boost > 0 ? MOVE_SPEED * BOOST_MULTIPLIER : MOVE_SPEED;
+
+      if (keys["ArrowRight"]) {
+        dog.x += speed;
+      }
+      if (keys["ArrowLeft"]) {
+        dog.x -= speed;
+      }
+
+      if (dog.x < 4) {
+        dog.x = 4;
+      }
+      if (dog.x > canvas.width - 120) {
+        dog.x = canvas.width - 120;
+      }
+    }
+
+    // ---- Dodawanie rzeczy na plansze ----
+    function addObstacle() {
+      const types = currentLevel().types;
+      const type = types[Math.floor(Math.random() * types.length)];
+
+      obstacles.push({
+        type: type,
+        x: canvas.width,
+        width: SIZES[type].width,
+        height: SIZES[type].height,
+        used: false,
+        passed: false,
+        popTimer: 60,
+        animal: Math.random() < 0.5 ? "kot" : "pies",
+        animalPhase: Math.random() * 6
+      });
+    }
+
+    function addRockGroup() {
+      // dwie albo trzy skaly z przerwami do przeskoczenia
+      const count = 2 + Math.floor(Math.random() * 2);
+      let x = canvas.width;
+
+      for (let i = 0; i < count; i++) {
+        const width = 60 + Math.random() * 30;
+        const height = 40 + Math.random() * 30;
+        rocks.push({ x: x, width: width, height: height });
+        x += width + 70 + Math.random() * 30;   // przerwa do przeskoczenia
+      }
+
+      rockCooldown = 260;   // przez ten czas nie dokladamy przeszkod
+    }
+
+    function addBowl() {
+      bowls.push({ x: canvas.width, width: 30, eaten: false });
+    }
+
+    function addPuff(x, y) {
+      puffs.push({ x: x, y: y, life: 30 });
+    }
+
+    // ---- Bialy piesek ----
+    function sendPuppyAway() {
+      puppy.active = false;
+    }
+
+    function updatePuppy() {
+      if (!puppy.active) {
+        if (puppiesSeen < currentLevel().puppies && levelFrame >= nextPuppyAt) {
+          puppy.active = true;
+          puppiesSeen++;
+          nextPuppyAt += Math.floor(currentLevel().duration / (currentLevel().puppies + 1));
+          puppy.x = canvas.width + 40;
+          puppy.y = GROUND_Y;
+          puppy.speedY = 0;
+          puppy.isJumping = false;
+          puppy.crouchTimer = 0;
+        }
+        return;
+      }
+
+      puppy.x -= gameSpeed + PUPPY_SPEED;
+
+      if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < 0.02) {
+        puppy.speedY = -(5 + Math.random() * 8);
+        puppy.isJumping = true;
+      }
+      if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < 0.01) {
+        puppy.crouchTimer = 40;
+      }
+      if (puppy.crouchTimer > 0) {
+        puppy.crouchTimer--;
+      }
+
+      puppy.speedY += GRAVITY;
+      puppy.y += puppy.speedY;
+      if (puppy.y >= GROUND_Y) {
+        puppy.y = GROUND_Y;
+        puppy.speedY = 0;
+        puppy.isJumping = false;
+      }
+
+      if (puppy.x < -100) {
+        sendPuppyAway();
+      }
+    }
+
+    // ---- Poziomy ----
+    function startLevel(newLevel, newLives) {
+      level = newLevel;
+      lives = newLives;
+      levelFrame = 0;
+      puppiesSeen = 0;
+      nextPuppyAt = Math.floor(LEVELS[newLevel].duration / (LEVELS[newLevel].puppies + 1));
+      gameSpeed = LEVELS[newLevel].speed;
+      obstacles = [];
+      rocks = [];
+      bowls = [];
+      puffs = [];
+      rockCooldown = 120;
+      puppy.active = false;
+      hearts = [];
+      girl.x = GIRL_HOME;
+      girl.state = "waiting";
+      petCooldown = 0;
+      dog.x = 80;
+      dog.y = GROUND_Y;
+      dog.speedY = 0;
+      dog.isJumping = false;
+      dog.stun = 0;
+      dog.invincible = 60;
+      dog.sitting = false;
+      dog.boost = 0;
+    }
+
+    function resetEverything() {
+      score = 0;
+      bowlsCollected = 0;
+      poopsStepped = 0;
+      clapTimer = 0;
+      bannerTimer = 0;
+      gameWon = false;
+      frame = 0;
+      startLevel(0, START_LIVES);
+      bannerText = "Poziom 1!";
+      bannerTimer = 110;
+    }
+
+    function checkLevelFinished() {
+      if (levelFrame < currentLevel().duration || puppy.active) {
+        return;
+      }
+
+      if (level === LEVELS.length - 1) {
+        gameWon = true;
+        rememberPlayer(playerName, Math.floor(score / 10));
+        return;
+      }
+
+      startLevel(level + 1, lives);
+      bannerText = "Poziom " + (level + 1) + "!";
+      bannerTimer = 120;
+    }
+
+    // ================= GLOWNA PETLA =================
+
+    function update() {
+      if (!running) {
+        return;
+      }
+
+      frame++;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGround();
+      drawGirl();
+
+      if (gameWon) {
+        gameSpeed = 0;
+      } else {
+        if (dog.stun > 0) {
+          dog.stun--;
+          gameSpeed = 0;
+          dog.speedY = 0;
+        } else if (isPettingPause()) {
+          // podczas glaskania plansza czeka - to bezpieczna przerwa
+          gameSpeed = 0;
+          dog.speedY = 0;
+        } else {
+          gameSpeed = gameSpeed + (currentLevel().speed - gameSpeed) * 0.08;
+          levelFrame++;
+          score++;
+
+          moveSideways();
+          updateDogVertical();
+
+          if (rockCooldown > 0) {
+            rockCooldown--;
+          } else {
+            if (frame % currentLevel().spawnEvery === 0) {
+              addObstacle();
+            }
+            if (currentLevel().rocks && frame % 330 === 0) {
+              addRockGroup();
+            }
+          }
+          if (frame % 230 === 75) {
+            addBowl();
+          }
+        }
+
+        updateGirl();
+        updatePuppy();
+        checkLevelFinished();
+
+        if (dog.boost > 0) {
+          dog.boost--;
+        }
+      }
+
+      // ---- ruch skal ----
+      for (const rock of rocks) {
+        rock.x -= gameSpeed;
+      }
+      rocks = rocks.filter(r => r.x + r.width > -50);
+      if (dog.stun === 0) {
+        pushOutOfRocks();
+      }
+
+      const box = dogBox();
+
+      // ---- przeszkody ----
+      for (const o of obstacles) {
+        o.x -= gameSpeed;
+
+        if (o.type === "krecik") {
+          o.popTimer--;
+          if (o.popTimer < -70) {
+            o.popTimer = 60;
+          }
+        }
+
+        const height = o.type === "krecik" ? (krecikVisible(o) ? o.height : 0) : o.height;
+        const hit = !o.used && height > 0 && dog.stun === 0 && dog.invincible === 0 &&
+                    overlaps(box, o.x, o.x + o.width, GRASS_TOP - height, GRASS_TOP);
+
+        if (hit) {
+          takeHit(o.type);
+          o.used = true;
+          o.passed = true;
+          if (o.type === "kupka") {
+            poopsStepped++;
+          }
+        }
+
+        if (!o.passed && o.x + o.width < dog.x + DOG_LEFT) {
+          o.passed = true;
+          clapTimer = 70;
+        }
+      }
+      obstacles = obstacles.filter(o => o.x + o.width > 0);
+
+      // ---- miski ----
+      for (const bowl of bowls) {
+        bowl.x -= gameSpeed;
+        if (!bowl.eaten && overlaps(box, bowl.x, bowl.x + bowl.width, GRASS_TOP - 20, GRASS_TOP)) {
+          bowl.eaten = true;
+          bowlsCollected++;
+        }
+      }
+      bowls = bowls.filter(b => !b.eaten && b.x + b.width > 0);
+
+      // ---- bialy piesek ----
+      if (puppy.active && dog.stun === 0 && dog.invincible === 0) {
+        const puppyHeight = puppy.crouchTimer > 0 ? 18 : 30;
+
+        if (overlaps(box, puppy.x + 4, puppy.x + 52, puppy.y - puppyHeight, puppy.y + 12)) {
+          if (dog.speedY > 0 && box.bottom < puppy.y) {
+            addPuff(puppy.x + 24, puppy.y - 12);
+            sendPuppyAway();
+            dog.speedY = -JUMP_POWER * 0.7;
+          } else {
+            takeHit("piesek");
+          }
+        }
+      }
+
+      for (const puff of puffs) {
+        puff.life--;
+      }
+      puffs = puffs.filter(p => p.life > 0);
+
+      for (const heart of hearts) {
+        heart.life--;
+        heart.y -= 0.8;
+      }
+      hearts = hearts.filter(h => h.life > 0);
+
+      if (clapTimer > 0) { clapTimer--; }
+      if (bannerTimer > 0) { bannerTimer--; }
+      if (dog.invincible > 0) { dog.invincible--; }
+
+      // ---- rysowanie ----
+      bowls.forEach(drawBowl);
+      rocks.forEach(drawRock);
+      obstacles.forEach(drawObstacle);
+      drawPuppy();
+      drawPuffs();
+      drawDog();
+      drawHearts();
+
+      // ---- liczniki ----
+      ctx.fillStyle = "black";
+      ctx.font = "18px sans-serif";
+      ctx.fillText(playerName, 20, 26);
+      ctx.fillText("Punkty: " + Math.floor(score / 10), 20, 50);
+      ctx.fillText("Miski: " + bowlsCollected, 20, 72);
+      ctx.fillText("Wdepnięcia: " + poopsStepped, 20, 94);
+      ctx.fillText("Poziom: " + (level + 1) + " / " + LEVELS.length, 600, 26);
+
+      // serduszka
+      for (let i = 0; i < START_LIVES; i++) {
+        drawHeart(620 + i * 26, 45, i < lives);
+      }
+
+      if (dog.boost > 0) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("Szybki Maniek! " + Math.ceil(dog.boost / 60) + "s", 20, 118);
+      }
+
+      // guzik glaskania jest zawsze, ale przez chwile po uzyciu jest szary
+      document.getElementById("petButton").disabled =
+        petCooldown > 0 || girl.state !== "waiting";
+
+      // pasek postepu poziomu
+      const progress = Math.min(1, levelFrame / currentLevel().duration);
+      ctx.fillStyle = "#DDDDDD";
+      ctx.fillRect(300, 20, 200, 12);
+      ctx.fillStyle = "#E75480";
+      ctx.fillRect(300, 20, 200 * progress, 12);
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(300, 20, 200, 12);
+
+      // ---- napisy na srodku ----
+      if (bannerTimer > 0) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(bannerText, canvas.width / 2, 120);
+        ctx.textAlign = "left";
+      }
+
+      if (gameWon) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Brawo " + playerName + "! Wszystkie poziomy!", canvas.width / 2, 110);
+        ctx.fillStyle = "black";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("Naciśnij spację, żeby zagrać jeszcze raz", canvas.width / 2, 145);
+        ctx.textAlign = "left";
+      }
+
+      requestAnimationFrame(update);
+    }
+  </script>
+</body>
+</html>
