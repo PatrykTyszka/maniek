@@ -309,6 +309,11 @@
     const COCO_FIRST = 500;      // pierwsza Coco w poziomie
     const COCO_EVERY = 1100;     // i co tyle klatek nastepna
 
+    // ---- Niebieskie piorko, ktore gubi Coco ----
+    const FEATHER_CHANCE = 0.001;   // szansa w kazdej klatce lotu, najwyzej jedno na przylot
+    const FEATHER_FALL = 0.9;       // piorko opada wolno
+    const FEATHER_SWAY = 22;        // i buja sie na boki
+
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
     // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
@@ -361,9 +366,11 @@
       reload: 0,       // przerwa po zrzucie
       drops: 0,        // ile zrzutow jej zostalo
       life: 0,         // po tylu klatkach odlatuje
-      leaving: false
+      leaving: false,
+      featherDropped: false
     };
     let bombs = [];    // kupy lecace z gory
+    let feathers = []; // niebieskie piorka, ktore gubi Coco
     let cocoTimer = 0; // odliczanie do nastepnego przylotu
 
     // ---- Zuzia: chodzi do Manka i glaszcze go ----
@@ -983,6 +990,33 @@
       }
     }
 
+    function drawFeather(feather) {
+      const tilt = feather.landed ? 1.4 : Math.sin(feather.y / 18) * 0.5;
+
+      ctx.save();
+      ctx.translate(feather.x, feather.y);
+      ctx.rotate(tilt);
+
+      ctx.fillStyle = "#42A5F5";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#90CAF9";
+      ctx.beginPath();
+      ctx.ellipse(-2, 0, 2.5, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(0, -13);
+      ctx.lineTo(0, 15);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     function drawBomb(bomb) {
       ctx.fillStyle = "#9E9E9E";   // kupa Coco jest szara
       ctx.beginPath();
@@ -1399,6 +1433,7 @@
         rocks = [];
         grumers = [];
         bombs = [];
+        feathers = [];
         dog.x = 80;
         dog.y = GROUND_Y;
         dog.speedY = 0;
@@ -1665,6 +1700,7 @@
         coco.drops = COCO_DROPS;
         coco.life = COCO_LIFE;
         coco.leaving = false;
+        coco.featherDropped = false;
         return;
       }
 
@@ -1691,6 +1727,12 @@
         coco.reload--;
       }
 
+      // czasem gubi piorko - najwyzej jedno na przylot
+      if (!coco.featherDropped && Math.random() < FEATHER_CHANCE) {
+        coco.featherDropped = true;
+        feathers.push({ baseX: coco.x, x: coco.x, y: COCO_Y + 10, landed: false });
+      }
+
       // goni Manka, ale wolniej niz on biega - da sie uciec
       const target = dog.x + 30;
       const distance = target - coco.x;
@@ -1703,6 +1745,47 @@
       if (coco.reload === 0 && Math.abs(coco.x - target) < 20) {
         coco.warning = COCO_WARNING;
       }
+    }
+
+    function eatFeather() {
+      if (lives < START_LIVES) {
+        lives++;
+        bannerText = "Piórko! Serduszka: " + lives;
+      } else {
+        bannerText = "Pyszne piórko!";
+      }
+
+      bannerTimer = 90;
+      addPuff(dog.x + 30, dog.y - 30);
+    }
+
+    function updateFeathers() {
+      if (isPettingPause() || dog.stun > 0) {
+        return;
+      }
+
+      const box = dogBox();
+
+      for (const feather of feathers) {
+        if (feather.landed) {
+          feather.x -= gameSpeed;   // lezy na trawie i jedzie razem z plansza
+        } else {
+          feather.y += FEATHER_FALL;
+          feather.x = feather.baseX + Math.sin(feather.y / 18) * FEATHER_SWAY;
+
+          if (feather.y >= GRASS_TOP - 8) {
+            feather.y = GRASS_TOP - 8;
+            feather.landed = true;
+          }
+        }
+
+        if (!feather.eaten && overlaps(box, feather.x - 10, feather.x + 10, feather.y - 14, feather.y + 14)) {
+          feather.eaten = true;
+          eatFeather();
+        }
+      }
+
+      feathers = feathers.filter(f => !f.eaten && f.x > -40);
     }
 
     function updateBombs() {
@@ -1750,6 +1833,7 @@
       cocoTimer = COCO_FIRST;
       coco.active = false;
       bombs = [];
+      feathers = [];
       puppy.active = false;
       hearts = [];
       girl.x = GIRL_HOME;
@@ -1927,6 +2011,7 @@
         updatePuppy();
         updateCoco();
         updateBombs();
+        updateFeathers();
         checkLevelFinished();
 
         if (dog.boost > 0) {
@@ -2051,6 +2136,7 @@
       drawPuppy();
       drawCoco();
       bombs.forEach(drawBomb);
+      feathers.forEach(drawFeather);
       drawPuffs();
       drawDog();
       drawHearts();
