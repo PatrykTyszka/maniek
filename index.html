@@ -287,6 +287,8 @@
     const GRUMER_HEIGHT = 46;
     const GRUMER_PLATFORM_WIDTH = 90;
     const GRUMER_PLATFORM_HEIGHT = 60;
+    const GRUMER_FIRST = 420;   // po tylu klatkach poziomu pojawia sie pierwszy Grumer
+    const GRUMER_EVERY = 700;   // i co tyle klatek nastepny
 
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
@@ -360,6 +362,7 @@
     let bannerText = "";
     let gameWon = false;
     let rockCooldown = 0;     // przerwa, zeby przeszkody nie ladowaly na skalach
+    let grumerTimer = 0;      // odliczanie do kolejnego Grumera
     let frame = 0;
 
     function currentLevel() {
@@ -1397,6 +1400,7 @@
       bowls = [];
       puffs = [];
       rockCooldown = 120;
+      grumerTimer = GRUMER_FIRST;
       puppy.active = false;
       hearts = [];
       girl.x = GIRL_HOME;
@@ -1473,15 +1477,21 @@
           moveSideways();
           updateDogVertical();
 
+          if (grumerTimer > 0) {
+            grumerTimer--;
+          }
+
           if (rockCooldown > 0) {
             rockCooldown--;
+          } else if (grumerTimer === 0) {
+            // czekal az bramka bedzie wolna - okazja sie nie marnuje
+            addGrumer();
+            grumerTimer = GRUMER_EVERY;
           } else {
             if (frame % currentLevel().spawnEvery === 0) {
               addObstacle();
             }
-            if (currentLevel().rocks && frame % 810 === 0) {
-              addGrumer();
-            } else if (currentLevel().rocks && frame % 330 === 0) {
+            if (currentLevel().rocks && frame % 330 === 0) {
               addRockGroup();
             }
           }
