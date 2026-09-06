@@ -297,6 +297,10 @@
     const GRUMER_PLATFORM_WIDTH = 90;
     const GRUMER_PLATFORM_HEIGHT = 95;      // Maniek doskakuje maksymalnie na 144 px
     const GRUMER_PLATFORM_THICKNESS = 16;   // polka wisi w powietrzu, nie stoi na ziemi
+    const ROCK_MIN_WIDTH = 34;
+    const ROCK_MAX_WIDTH = 90;
+    const ROCK_SAFETY = 0.8;    // skrzynka jest o 20% wezsza, niz Maniek ledwo przeskakuje
+
     const GRUMER_FIRST = 700;    // po tylu klatkach poziomu pojawia sie pierwszy Grumer
     const GRUMER_EVERY = 1800;   // i co tyle klatek nastepny
 
@@ -324,14 +328,15 @@
     // puppyRush  - o ile szybciej niz plansza biegnie Benio
     // spawnEvery - co ile klatek pojawia sie przeszkoda
     // types      - jakie przeszkody moga sie pojawic
-    // rocks      - czy sa skaly do przeskakiwania
+    // rocks      - czy sa skrzynki do przeskakiwania
+    // rockLow/High - jak wysokie sa skrzynki na tym poziomie
     // coco       - czy przylatuje papuzka Coco
     const LEVELS = [
-      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, puppyLeap: 0.006, puppyRush: 0.4, spawnEvery: 190, types: ["kupka"], rocks: false, coco: true },
-      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, puppyLeap: 0.009, puppyRush: 0.6, spawnEvery: 175, types: ["kupka", "buda"], rocks: false, coco: true },
-      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, puppyLeap: 0.013, puppyRush: 0.9, spawnEvery: 170, types: ["kupka", "buda"], rocks: true, coco: true },
-      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, puppyLeap: 0.017, puppyRush: 1.2, spawnEvery: 160, types: ["kupka", "buda"], rocks: true, coco: true },
-      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, puppyLeap: 0.020, puppyRush: 1.5, spawnEvery: 150, types: ["kupka", "buda"], rocks: true, coco: true }
+      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, puppyLeap: 0.006, puppyRush: 0.4, spawnEvery: 190, types: ["kupka"], rocks: false, rockLow: 40, rockHigh: 55, coco: true },
+      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, puppyLeap: 0.009, puppyRush: 0.6, spawnEvery: 175, types: ["kupka", "buda"], rocks: false, rockLow: 40, rockHigh: 60, coco: true },
+      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, puppyLeap: 0.013, puppyRush: 0.9, spawnEvery: 170, types: ["kupka", "buda"], rocks: true, rockLow: 45, rockHigh: 65, coco: true },
+      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, puppyLeap: 0.017, puppyRush: 1.2, spawnEvery: 160, types: ["kupka", "buda"], rocks: true, rockLow: 55, rockHigh: 78, coco: true },
+      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, puppyLeap: 0.020, puppyRush: 1.5, spawnEvery: 150, types: ["kupka", "buda"], rocks: true, rockLow: 65, rockHigh: 92, coco: true }
     ];
 
     const SIZES = {
@@ -1625,14 +1630,30 @@
       });
     }
 
+    // ile klatek Maniek jest ponad dana wysokoscia w trakcie skoku
+    function framesAbove(height) {
+      const peak = (JUMP_POWER * JUMP_POWER) / (2 * GRAVITY);
+      return 4 * Math.sqrt(Math.max(0, peak - height));
+    }
+
+    // najszersza skrzynka tej wysokosci, ktora Maniek zdazy przeskoczyc, stojac w miejscu
+    function jumpableWidth(height) {
+      const dogWidth = DOG_RIGHT - DOG_LEFT;
+      const room = framesAbove(height) * currentLevel().speed - dogWidth;
+
+      return Math.max(ROCK_MIN_WIDTH, Math.min(ROCK_MAX_WIDTH, room * ROCK_SAFETY));
+    }
+
     function addRockGroup() {
-      // dwie albo trzy skaly z przerwami do przeskoczenia
+      // dwie albo trzy skrzynki z przerwami do przeskoczenia
       const count = 2 + Math.floor(Math.random() * 2);
+      const low = currentLevel().rockLow;
+      const high = currentLevel().rockHigh;
       let x = canvas.width;
 
       for (let i = 0; i < count; i++) {
-        const width = 60 + Math.random() * 30;
-        const height = 40 + Math.random() * 30;
+        const height = low + Math.random() * (high - low);
+        const width = jumpableWidth(height);
         rocks.push({ x: x, width: width, height: height });
         x += width + 70 + Math.random() * 30;   // przerwa do przeskoczenia
       }
