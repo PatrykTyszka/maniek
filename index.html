@@ -286,29 +286,30 @@
     const GRUMER_WIDTH = 56;
     const GRUMER_HEIGHT = 46;
     const GRUMER_PLATFORM_WIDTH = 90;
-    const GRUMER_PLATFORM_HEIGHT = 60;
-    const GRUMER_FIRST = 420;   // po tylu klatkach poziomu pojawia sie pierwszy Grumer
-    const GRUMER_EVERY = 700;   // i co tyle klatek nastepny
+    const GRUMER_PLATFORM_HEIGHT = 95;      // Maniek doskakuje maksymalnie na 144 px
+    const GRUMER_PLATFORM_THICKNESS = 16;   // polka wisi w powietrzu, nie stoi na ziemi
+    const GRUMER_FIRST = 700;    // po tylu klatkach poziomu pojawia sie pierwszy Grumer
+    const GRUMER_EVERY = 1800;   // i co tyle klatek nastepny
 
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
     // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
     // puppies    - ile razy wybiegnie bialy piesek
+    // puppyJump  - jak wysoko skacze piesek, jako czesc wysokosci mapy
     // spawnEvery - co ile klatek pojawia sie przeszkoda
     // types      - jakie przeszkody moga sie pojawic
     // rocks      - czy sa skaly do przeskakiwania
     const LEVELS = [
-      { speed: 2.5, duration: 2400, puppies: 1,  spawnEvery: 190, types: ["kupka"], rocks: false },
-      { speed: 2.9, duration: 2600, puppies: 2,  spawnEvery: 175, types: ["kupka", "buda"], rocks: false },
-      { speed: 3.3, duration: 2800, puppies: 5,  spawnEvery: 170, types: ["kupka", "buda", "krecik"], rocks: true },
-      { speed: 3.7, duration: 3000, puppies: 10, spawnEvery: 160, types: ["kupka", "buda", "krecik"], rocks: true },
-      { speed: 4.1, duration: 3200, puppies: 15, spawnEvery: 150, types: ["kupka", "buda", "krecik"], rocks: true }
+      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, spawnEvery: 190, types: ["kupka"], rocks: false },
+      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, spawnEvery: 175, types: ["kupka", "buda"], rocks: false },
+      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, spawnEvery: 170, types: ["kupka", "buda"], rocks: true },
+      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, spawnEvery: 160, types: ["kupka", "buda"], rocks: true },
+      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, spawnEvery: 150, types: ["kupka", "buda"], rocks: true }
     ];
 
     const SIZES = {
-      kupka:  { width: 22, height: 20 },
-      buda:   { width: 48, height: 52 },
-      krecik: { width: 26, height: 24 }
+      kupka: { width: 22, height: 20 },
+      buda:  { width: 48, height: 52 }
     };
 
     // ---- Maniek ----
@@ -923,61 +924,28 @@
       }
     }
 
-    function krecikVisible(o) {
-      return o.popTimer <= 0;
-    }
-
-    function drawKrecik(o) {
-      ctx.fillStyle = "#3E2723";
-      ctx.beginPath();
-      ctx.ellipse(o.x + 13, GRASS_TOP + 1, 15, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (!krecikVisible(o)) {
-        return;
-      }
-
-      const top = GRASS_TOP - 22;
-
-      ctx.fillStyle = "#5D4037";
-      ctx.beginPath();
-      ctx.arc(o.x + 13, top + 10, 12, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#EFC3A0";
-      ctx.beginPath();
-      ctx.ellipse(o.x + 3, top + 16, 4, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(o.x + 23, top + 16, 4, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "#FF9AA2";
-      ctx.beginPath();
-      ctx.arc(o.x + 13, top + 12, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "black";
-      ctx.beginPath();
-      ctx.arc(o.x + 9, top + 6, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(o.x + 17, top + 6, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     function drawObstacle(o) {
       if (o.type === "kupka") {
         drawKupka(o);
-      } else if (o.type === "buda") {
-        drawBuda(o);
       } else {
-        drawKrecik(o);
+        drawBuda(o);
       }
     }
 
     // ---- Skaly, po ktorych sie skacze ----
     function drawRock(rock) {
       const top = GRASS_TOP - rock.height;
+
+      if (rock.oneWay) {
+        // wiszaca polka pod domkiem Grumera
+        ctx.fillStyle = "#9E9E9E";
+        ctx.fillRect(rock.x, top, rock.width, GRUMER_PLATFORM_THICKNESS);
+        ctx.fillStyle = "#BDBDBD";
+        ctx.fillRect(rock.x, top, rock.width, 6);
+        ctx.fillStyle = "#7A7A7A";
+        ctx.fillRect(rock.x, top + GRUMER_PLATFORM_THICKNESS - 3, rock.width, 3);
+        return;
+      }
 
       ctx.fillStyle = "#9E9E9E";
       ctx.fillRect(rock.x, top, rock.width, rock.height);
@@ -1241,6 +1209,11 @@
       for (const rock of rocks) {
         const top = GRASS_TOP - rock.height;
 
+        // polka Grumera wisi w powietrzu - nigdy nie blokuje z boku
+        if (rock.oneWay) {
+          continue;
+        }
+
         // jesli Maniek stoi na skale, nic go nie blokuje
         if (dog.y + 14 <= top + 4) {
           continue;
@@ -1297,7 +1270,6 @@
         height: SIZES[type].height,
         used: false,
         passed: false,
-        popTimer: 60,
         animal: Math.random() < 0.5 ? "kot" : "pies",
         animalPhase: Math.random() * 6
       });
@@ -1323,7 +1295,8 @@
       const platform = {
         x: canvas.width,
         width: GRUMER_PLATFORM_WIDTH,
-        height: GRUMER_PLATFORM_HEIGHT
+        height: GRUMER_PLATFORM_HEIGHT,
+        oneWay: true   // Maniek przebiega pod spodem, laduje tylko z gory
       };
 
       rocks.push(platform);
@@ -1363,7 +1336,10 @@
       puppy.x -= gameSpeed + PUPPY_SPEED;
 
       if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < 0.02) {
-        puppy.speedY = -(5 + Math.random() * 8);
+        // GRASS_TOP to wysokosc mapy nad trawa; poziom decyduje, jaka jej czesc piesek przeskakuje
+        const maxHeight = GRASS_TOP * currentLevel().puppyJump;
+        const height = maxHeight * (0.5 + Math.random() * 0.5);
+        puppy.speedY = -Math.sqrt(2 * GRAVITY * height);
         puppy.isJumping = true;
       }
       if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < 0.01) {
@@ -1535,16 +1511,8 @@
       for (const o of obstacles) {
         o.x -= gameSpeed;
 
-        if (o.type === "krecik") {
-          o.popTimer--;
-          if (o.popTimer < -70) {
-            o.popTimer = 60;
-          }
-        }
-
-        const height = o.type === "krecik" ? (krecikVisible(o) ? o.height : 0) : o.height;
-        const hit = !o.used && height > 0 && dog.stun === 0 && dog.invincible === 0 &&
-                    overlaps(box, o.x, o.x + o.width, GRASS_TOP - height, GRASS_TOP);
+        const hit = !o.used && dog.stun === 0 && dog.invincible === 0 &&
+                    overlaps(box, o.x, o.x + o.width, GRASS_TOP - o.height, GRASS_TOP);
 
         if (hit) {
           takeHit(o.type);
@@ -1578,10 +1546,16 @@
         const puppyHeight = puppy.crouchTimer > 0 ? 18 : 30;
 
         if (overlaps(box, puppy.x + 4, puppy.x + 52, puppy.y - puppyHeight, puppy.y + 12)) {
-          if (dog.speedY > 0 && box.bottom < puppy.y) {
+          const fromAbove = dog.speedY > 0 && box.bottom < puppy.y;
+
+          // kolorowy Maniek jest nie do zatrzymania - straca pieska przy kazdym zetknieciu
+          if (fromAbove || dog.color !== DOG_BROWN) {
             addPuff(puppy.x + 24, puppy.y - 12);
             sendPuppyAway();
-            dog.speedY = -JUMP_POWER * 0.7;
+
+            if (fromAbove) {
+              dog.speedY = -JUMP_POWER * 0.7;
+            }
           } else {
             takeHit("piesek");
           }
