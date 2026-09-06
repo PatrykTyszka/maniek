@@ -270,6 +270,14 @@
     // ---- Kolory Manka ----
     // body - cialo, ear - ciemniejszy odcien na ucho
     const DOG_BROWN = { name: "brazowy", body: "#8B5A2B", ear: "#6B4423" };
+    const DOG_GRAY = { name: "szary", body: "#9E9E9E", ear: "#757575" };   // po kupie Coco
+
+    const DIRT_SLOWDOWN = 0.2;    // kazda kupa zabiera 20% predkosci
+    const DIRT_MIN_SPEED = 0.4;   // ale nie wiecej niz do 40%
+    const YUCK_TIME = 40;         // jak dlugo Maniek robi mine po wdepnieciu
+
+    const POND_EVERY = 430;       // co tyle klatek pojawia sie jeziorko
+    const POND_WIDTH = 62;
     const DOG_COLORS = [
       { name: "czerwony",    body: "#E53935", ear: "#B71C1C" },
       { name: "pomaranczowy", body: "#FB8C00", ear: "#E65100" },
@@ -334,7 +342,9 @@
       invincible: 0,
       sitting: false,   // siedzi, gdy Zuzia go glaszcze
       boost: 0,         // gdy > 0, biega szybciej po poglaskaniu
-      color: DOG_BROWN  // zmienia sie w Grumerze, wraca po wdepnieciu w kupke
+      color: DOG_BROWN, // zmienia sie w Grumerze, wraca po wdepnieciu w kupke
+      dirt: 0,          // ile kup ma na sobie - kazda go spowalnia
+      yuck: 0           // mina po wdepnieciu w kupke
     };
 
     // ---- Bialy piesek ----
@@ -372,6 +382,7 @@
     let rocks = [];
     let grumers = [];
     let bowls = [];
+    let ponds = [];
     let puffs = [];
     let level = 0;
     let levelFrame = 0;       // ile klatek trwa juz ten poziom
@@ -386,6 +397,7 @@
     let bannerTimer = 0;
     let bannerText = "";
     let gameWon = false;
+    let gameOver = false;
     let rockCooldown = 0;     // przerwa, zeby przeszkody nie ladowaly na skalach
     let grumerTimer = 0;      // odliczanie do kolejnego Grumera
     let frame = 0;
@@ -492,7 +504,7 @@
     const keys = {};
 
     function jump() {
-      if (gameWon) {
+      if (gameWon || gameOver) {
         resetEverything();
         return;
       }
@@ -578,6 +590,7 @@
       const feetY = GRASS_TOP - 4;
       const clapping = clapTimer > 0;
       const petting = girl.state === "petting";
+      const crying = girl.state === "crying";
 
       ctx.fillStyle = "#F1C27D";
       ctx.fillRect(x - 7, feetY - 16, 5, 16);
@@ -594,7 +607,15 @@
       ctx.strokeStyle = "#F1C27D";
       ctx.lineWidth = 4;
 
-      if (petting) {
+      if (crying) {
+        // obie rece przy oczach
+        ctx.beginPath();
+        ctx.moveTo(x - 10, feetY - 46);
+        ctx.lineTo(x - 6, feetY - 58);
+        ctx.moveTo(x + 10, feetY - 46);
+        ctx.lineTo(x + 6, feetY - 58);
+        ctx.stroke();
+      } else if (petting) {
         // jedna reka glaszcze Manka po glowie, w gore i w dol
         const stroke = Math.sin(frame / 5) * 5;
         ctx.beginPath();
@@ -639,10 +660,28 @@
       ctx.strokeStyle = "black";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(x, feetY - 60, 4, 0.2, Math.PI - 0.2);
+      if (crying) {
+        ctx.arc(x, feetY - 54, 4, Math.PI + 0.2, -0.2);   // odwrocony usmiech
+      } else {
+        ctx.arc(x, feetY - 60, 4, 0.2, Math.PI - 0.2);
+      }
       ctx.stroke();
 
-      if (petting) {
+      if (crying) {
+        ctx.fillStyle = "#4FC3F7";
+        for (let i = 0; i < 2; i++) {
+          const dropY = feetY - 60 + ((frame / 3) + i * 10) % 20;
+          ctx.beginPath();
+          ctx.ellipse(x - 4 + i * 8, dropY, 2.5, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      if (crying) {
+        ctx.fillStyle = "#E75480";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("Zuzia płacze...", x - 44, feetY - 80);
+      } else if (petting) {
         ctx.fillStyle = "#E75480";
         ctx.font = "16px sans-serif";
         ctx.fillText("Grzeczny piesek!", x - 50, feetY - 80);
@@ -724,10 +763,12 @@
       ctx.fillStyle = dog.color.body;
       ctx.fillRect(dog.x + 54, dog.y - 26, 12, 8);
 
-      if (dog.stun > 0 && dog.stunKind === "kupka") {
+      if (dog.yuck > 0) {
         drawTongueFace();
       } else if (dog.stun > 0) {
         drawDizzyFace();
+      } else if (gameOver) {
+        drawSadFace();
       } else {
         ctx.fillStyle = "black";
         ctx.beginPath();
@@ -749,6 +790,27 @@
       ctx.fillStyle = "#FF6699";
       ctx.beginPath();
       ctx.ellipse(dog.x + 62, dog.y - 14, 4, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawSadFace() {
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(dog.x + 50, dog.y - 28, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // opuszczona brew
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(dog.x + 45, dog.y - 34);
+      ctx.lineTo(dog.x + 54, dog.y - 31);
+      ctx.stroke();
+
+      // lza
+      ctx.fillStyle = "#4FC3F7";
+      ctx.beginPath();
+      ctx.ellipse(dog.x + 51, dog.y - 22 + (frame / 4) % 10, 2.5, 4, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -922,7 +984,7 @@
     }
 
     function drawBomb(bomb) {
-      ctx.fillStyle = "#5C3317";
+      ctx.fillStyle = "#9E9E9E";   // kupa Coco jest szara
       ctx.beginPath();
       ctx.ellipse(bomb.x, bomb.y, 7, 9, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1161,6 +1223,43 @@
       ctx.fill();
     }
 
+    // ---- Jeziorko, w ktorym Maniek sie obmywa ----
+    function drawPond(pond) {
+      const bottom = GRASS_TOP + 6;
+
+      // brzeg
+      ctx.fillStyle = "#8D6E63";
+      ctx.beginPath();
+      ctx.ellipse(pond.x + POND_WIDTH / 2, bottom, POND_WIDTH / 2, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // woda
+      ctx.fillStyle = "#29B6F6";
+      ctx.beginPath();
+      ctx.ellipse(pond.x + POND_WIDTH / 2, bottom - 1, POND_WIDTH / 2 - 4, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // falki
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 2; i++) {
+        const shift = Math.sin(frame / 12 + i) * 4;
+        ctx.beginPath();
+        ctx.moveTo(pond.x + 12 + shift, bottom - 3 + i * 5);
+        ctx.lineTo(pond.x + POND_WIDTH - 12 + shift, bottom - 3 + i * 5);
+        ctx.stroke();
+      }
+
+      // kropelki nad woda
+      ctx.fillStyle = "#B3E5FC";
+      for (let i = 0; i < 3; i++) {
+        const dropY = bottom - 14 - ((frame / 5 + i * 7) % 14);
+        ctx.beginPath();
+        ctx.arc(pond.x + 16 + i * 15, dropY, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ---- Serduszka ----
     function drawHeart(x, y, filled) {
       ctx.fillStyle = filled ? "#E00000" : "#DDDDDD";
@@ -1202,7 +1301,7 @@
       if (girl.state !== "waiting" || petCooldown > 0) {
         return;
       }
-      if (dog.stun > 0 || dog.isJumping || gameWon) {
+      if (dog.stun > 0 || dog.isJumping || gameWon || gameOver) {
         return;
       }
 
@@ -1263,6 +1362,13 @@
     function enterGrumer(g) {
       g.used = true;
 
+      // Grumer nie zmywa kupy, a brudnemu Mankowi nie da koloru
+      if (dog.dirt > 0) {
+        bannerText = "Maniek brudny! Trzeba do jeziorka";
+        bannerTimer = 100;
+        return;
+      }
+
       const newColor = DOG_COLORS[Math.floor(Math.random() * DOG_COLORS.length)];
       dog.color = newColor;
 
@@ -1286,7 +1392,7 @@
       bannerTimer = 110;
 
       if (lives <= 0) {
-        startLevel(level, START_LIVES);   // ten sam etap od nowa
+        endGame();
       } else {
         // czyscimy teren, zeby Maniek mial gdzie wrocic
         obstacles = [];
@@ -1360,12 +1466,23 @@
       }
     }
 
+    // kazda kupa na Manku zabiera mu czesc predkosci, az do 40%
+    function dirtFactor() {
+      return Math.max(DIRT_MIN_SPEED, 1 - dog.dirt * DIRT_SLOWDOWN);
+    }
+
+    function getDirty(color) {
+      dog.dirt++;
+      dog.color = color;
+    }
+
     function moveSideways() {
       if (dog.sitting) {
         return;   // gdy siedzi, nigdzie nie idzie
       }
 
-      const speed = dog.boost > 0 ? MOVE_SPEED * BOOST_MULTIPLIER : MOVE_SPEED;
+      const base = dog.boost > 0 ? MOVE_SPEED * BOOST_MULTIPLIER : MOVE_SPEED;
+      const speed = base * dirtFactor();
 
       if (keys["ArrowRight"]) {
         dog.x += speed;
@@ -1431,6 +1548,20 @@
 
     function addBowl() {
       bowls.push({ x: canvas.width, width: 30, eaten: false });
+    }
+
+    function addPond() {
+      ponds.push({ x: canvas.width, width: POND_WIDTH });
+    }
+
+    function washDog() {
+      dog.dirt = 0;
+      dog.yuck = 0;
+      dog.color = DOG_BROWN;
+
+      addPuff(dog.x + 30, GRASS_TOP - 20);
+      bannerText = "Maniek czysty!";
+      bannerTimer = 80;
     }
 
     function addPuff(x, y) {
@@ -1499,7 +1630,7 @@
     }
 
     function hitByCoco() {
-      dog.color = DOG_BROWN;   // okupany Maniek traci kolor
+      getDirty(DOG_GRAY);   // szara kupa Coco: kolor z Grumera znika i Maniek zwalnia
       takeHit("coco");
       lives--;
 
@@ -1507,7 +1638,7 @@
       bannerTimer = 110;
 
       if (lives <= 0) {
-        startLevel(level, START_LIVES);   // ten sam etap od nowa
+        endGame();
       }
     }
 
@@ -1612,6 +1743,7 @@
       rocks = [];
       grumers = [];
       bowls = [];
+      ponds = [];
       puffs = [];
       rockCooldown = 120;
       grumerTimer = GRUMER_FIRST;
@@ -1632,6 +1764,20 @@
       dog.sitting = false;
       dog.boost = 0;
       dog.color = DOG_BROWN;
+      dog.dirt = 0;
+      dog.yuck = 0;
+    }
+
+    function endGame() {
+      gameOver = true;
+      rememberPlayer(playerName, Math.floor(score / 10));
+
+      // scena koncowa: Maniek smutny, Zuzia placze, Coco i Benio sie cieszą
+      dog.sitting = true;
+      dog.stun = 0;
+      dog.yuck = 0;
+      dog.invincible = 0;
+      girl.state = "crying";
     }
 
     function resetEverything() {
@@ -1641,6 +1787,7 @@
       clapTimer = 0;
       bannerTimer = 0;
       gameWon = false;
+      gameOver = false;
       frame = 0;
       startLevel(0, START_LIVES);
       bannerText = "Poziom 1!";
@@ -1663,6 +1810,55 @@
       bannerTimer = 120;
     }
 
+    // ---- Scena po przegranej ----
+    function drawGameOver() {
+      // Maniek siedzi smutny
+      dog.x = 90;
+      dog.y = GROUND_Y;
+      drawDog();
+
+      // Zuzia placze obok niego
+      girl.x = 240;
+      drawGirl();
+
+      // Benio skacze z radosci
+      puppy.active = true;
+      puppy.crouchTimer = 0;
+      puppy.isJumping = false;
+      puppy.x = 420;
+      puppy.y = GROUND_Y - Math.abs(Math.sin(frame / 10)) * 26;
+      drawPuppy();
+
+      ctx.fillStyle = "#333";
+      ctx.font = "15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Benio!", 448, GRASS_TOP - 58);
+
+      // Coco lata nad nimi i sie cieszy
+      coco.active = true;
+      coco.warning = 0;
+      coco.x = 600 + Math.sin(frame / 20) * 40;
+      drawCoco();
+
+      ctx.fillStyle = "#333";
+      ctx.font = "15px sans-serif";
+      ctx.fillText("Coco!", coco.x, COCO_Y + 34);
+
+      // napisy
+      ctx.fillStyle = "#E00000";
+      ctx.font = "34px sans-serif";
+      ctx.fillText("Koniec gry!", canvas.width / 2, 100);
+
+      ctx.fillStyle = "black";
+      ctx.font = "20px sans-serif";
+      ctx.fillText("Coco i Benio wygrały, Maniek przegrał", canvas.width / 2, 132);
+
+      ctx.font = "18px sans-serif";
+      ctx.fillText("Punkty " + playerName + ": " + Math.floor(score / 10), canvas.width / 2, 160);
+      ctx.fillText("Naciśnij spację, żeby zagrać od nowa", canvas.width / 2, 186);
+      ctx.textAlign = "left";
+    }
+
     // ================= GLOWNA PETLA =================
 
     function update() {
@@ -1673,6 +1869,13 @@
       frame++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawGround();
+
+      if (gameOver) {
+        drawGameOver();
+        requestAnimationFrame(update);
+        return;
+      }
+
       drawGirl();
 
       if (gameWon) {
@@ -1714,6 +1917,9 @@
           }
           if (frame % 230 === 75) {
             addBowl();
+          }
+          if (frame % POND_EVERY === 200) {
+            addPond();
           }
         }
 
@@ -1758,12 +1964,16 @@
                     overlaps(box, o.x, o.x + o.width, GRASS_TOP - o.height, GRASS_TOP);
 
         if (hit) {
-          takeHit(o.type);
           o.used = true;
           o.passed = true;
+
           if (o.type === "kupka") {
+            // Maniek nie staje - idzie dalej, tylko wolniej i z mina
             poopsStepped++;
-            dog.color = DOG_BROWN;   // po kupce kolor z Grumera znika
+            dog.yuck = YUCK_TIME;
+            getDirty(DOG_BROWN);
+          } else {
+            takeHit(o.type);
           }
         }
 
@@ -1773,6 +1983,17 @@
         }
       }
       obstacles = obstacles.filter(o => o.x + o.width > 0);
+
+      // ---- jeziorko ----
+      for (const pond of ponds) {
+        pond.x -= gameSpeed;
+
+        // brudny Maniek wskakuje i wychodzi czysty; czystemu jeziorko nic nie robi
+        if (dog.dirt > 0 && overlaps(box, pond.x, pond.x + pond.width, GRASS_TOP - 16, GRASS_TOP + 10)) {
+          washDog();
+        }
+      }
+      ponds = ponds.filter(p => p.x + p.width > 0);
 
       // ---- miski ----
       for (const bowl of bowls) {
@@ -1816,11 +2037,13 @@
       }
       hearts = hearts.filter(h => h.life > 0);
 
+      if (dog.yuck > 0) { dog.yuck--; }
       if (clapTimer > 0) { clapTimer--; }
       if (bannerTimer > 0) { bannerTimer--; }
       if (dog.invincible > 0) { dog.invincible--; }
 
       // ---- rysowanie ----
+      ponds.forEach(drawPond);
       bowls.forEach(drawBowl);
       rocks.forEach(drawRock);
       grumers.forEach(drawGrumer);
@@ -1850,6 +2073,13 @@
         ctx.fillStyle = "#E75480";
         ctx.font = "18px sans-serif";
         ctx.fillText("Szybki Maniek! " + Math.ceil(dog.boost / 60) + "s", 20, 118);
+      }
+
+      if (dog.dirt > 0) {
+        ctx.fillStyle = "#5C3317";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("Brudny! Prędkość: " + Math.round(dirtFactor() * 100) + "%",
+                     20, dog.boost > 0 ? 140 : 118);
       }
 
       // guzik glaskania jest zawsze, ale przez chwile po uzyciu jest szary
