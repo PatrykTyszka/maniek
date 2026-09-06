@@ -259,7 +259,8 @@
     const MOVE_SPEED = 3.5;
     const STUN_TIME = 50;
     const START_LIVES = 3;
-    const MAX_LIVES = 6;      // piorka moga dolozyc serduszek ponad trzy
+    const MAX_LIVES = 6;          // piorka moga dolozyc serduszek ponad trzy
+    const BOWLS_PER_HEART = 20;   // tyle pudelek karmy oddaje jedno serduszko
     const GIRL_HOME = 690;      // gdzie Zuzia stoi na co dzien
     const GIRL_WALK = 4;        // jak szybko Zuzia idzie do Manka
     const PET_TIME = 90;        // jak dlugo trwa glaskanie
@@ -1846,6 +1847,19 @@
       }
     }
 
+    // 20 pudelek karmy uzupelnia brakujace serduszko, ale nigdy ponad trzy
+    function eatEnoughFood() {
+      if (lives < START_LIVES) {
+        lives++;
+        bannerText = BOWLS_PER_HEART + " misek! Serduszka: " + lives;
+      } else {
+        bannerText = BOWLS_PER_HEART + " misek! Najedzony Maniek";
+      }
+
+      bannerTimer = 100;
+      addPuff(dog.x + 30, dog.y - 30);
+    }
+
     function eatFeather() {
       // piorko daje serduszko takze ponad zwykle trzy
       if (lives < MAX_LIVES) {
@@ -2198,6 +2212,10 @@
         if (!bowl.eaten && overlaps(box, bowl.x, bowl.x + bowl.width, GRASS_TOP - 20, GRASS_TOP)) {
           bowl.eaten = true;
           bowlsCollected++;
+
+          if (bowlsCollected % BOWLS_PER_HEART === 0) {
+            eatEnoughFood();
+          }
         }
       }
       bowls = bowls.filter(b => !b.eaten && b.x + b.width > 0);
@@ -2268,7 +2286,8 @@
       ctx.font = "18px sans-serif";
       ctx.fillText(playerName, 20, 26);
       ctx.fillText("Punkty: " + Math.floor(score / 10), 20, 50);
-      ctx.fillText("Miski: " + bowlsCollected, 20, 72);
+      const toHeart = BOWLS_PER_HEART - (bowlsCollected % BOWLS_PER_HEART);
+      ctx.fillText("Miski: " + bowlsCollected + " (do serduszka: " + toHeart + ")", 20, 72);
       ctx.fillText("Wdepnięcia: " + poopsStepped, 20, 94);
       ctx.fillText("Poziom: " + (level + 1) + " / " + LEVELS.length, 600, 26);
 
