@@ -258,8 +258,8 @@
     const JUMP_POWER = 12;
     const MOVE_SPEED = 3.5;
     const STUN_TIME = 50;
-    const PUPPY_SPEED = 1.5;
     const START_LIVES = 3;
+    const MAX_LIVES = 6;      // piorka moga dolozyc serduszek ponad trzy
     const GIRL_HOME = 690;      // gdzie Zuzia stoi na co dzien
     const GIRL_WALK = 4;        // jak szybko Zuzia idzie do Manka
     const PET_TIME = 90;        // jak dlugo trwa glaskanie
@@ -277,7 +277,8 @@
     const YUCK_TIME = 40;         // jak dlugo Maniek robi mine po wdepnieciu
 
     const POND_EVERY = 430;       // co tyle klatek pojawia sie jeziorko
-    const POND_WIDTH = 62;
+    const POND_WIDTH = 78;
+    const BATH_TIME = 30;         // Maniek siedzi w wodzie pol sekundy
     const DOG_COLORS = [
       { name: "czerwony",    body: "#E53935", ear: "#B71C1C" },
       { name: "pomaranczowy", body: "#FB8C00", ear: "#E65100" },
@@ -317,18 +318,20 @@
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
     // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
-    // puppies    - ile razy wybiegnie bialy piesek
-    // puppyJump  - jak wysoko skacze piesek, jako czesc wysokosci mapy
+    // puppies    - ile razy wybiegnie bialy piesek Benio
+    // puppyJump  - jak wysoko skacze Benio, jako czesc wysokosci mapy
+    // puppyLeap  - szansa na skok w kazdej klatce; na pierwszych poziomach jest spokojniejszy
+    // puppyRush  - o ile szybciej niz plansza biegnie Benio
     // spawnEvery - co ile klatek pojawia sie przeszkoda
     // types      - jakie przeszkody moga sie pojawic
     // rocks      - czy sa skaly do przeskakiwania
     // coco       - czy przylatuje papuzka Coco
     const LEVELS = [
-      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, spawnEvery: 190, types: ["kupka"], rocks: false, coco: false },
-      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, spawnEvery: 175, types: ["kupka", "buda"], rocks: false, coco: false },
-      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, spawnEvery: 170, types: ["kupka", "buda"], rocks: true, coco: true },
-      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, spawnEvery: 160, types: ["kupka", "buda"], rocks: true, coco: true },
-      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, spawnEvery: 150, types: ["kupka", "buda"], rocks: true, coco: true }
+      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, puppyLeap: 0.006, puppyRush: 0.4, spawnEvery: 190, types: ["kupka"], rocks: false, coco: true },
+      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, puppyLeap: 0.009, puppyRush: 0.6, spawnEvery: 175, types: ["kupka", "buda"], rocks: false, coco: true },
+      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, puppyLeap: 0.013, puppyRush: 0.9, spawnEvery: 170, types: ["kupka", "buda"], rocks: true, coco: true },
+      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, puppyLeap: 0.017, puppyRush: 1.2, spawnEvery: 160, types: ["kupka", "buda"], rocks: true, coco: true },
+      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, puppyLeap: 0.020, puppyRush: 1.5, spawnEvery: 150, types: ["kupka", "buda"], rocks: true, coco: true }
     ];
 
     const SIZES = {
@@ -349,7 +352,8 @@
       boost: 0,         // gdy > 0, biega szybciej po poglaskaniu
       color: DOG_BROWN, // zmienia sie w Grumerze, wraca po wdepnieciu w kupke
       dirt: 0,          // ile kup ma na sobie - kazda go spowalnia
-      yuck: 0           // mina po wdepnieciu w kupke
+      yuck: 0,          // mina po wdepnieciu w kupke
+      bathing: 0        // > 0: siedzi w jeziorku
     };
 
     // ---- Bialy piesek ----
@@ -836,7 +840,7 @@
       }
     }
 
-    // ---- Bialy piesek ----
+    // ---- Benio: bialy maltanczyk z dluga sierscia ----
     function drawPuppy() {
       if (!puppy.active) {
         return;
@@ -849,53 +853,87 @@
       ctx.scale(-1, squash);
 
       ctx.fillStyle = "white";
-      ctx.strokeStyle = "#999";
+      ctx.strokeStyle = "#CFCFCF";
       ctx.lineWidth = 1;
 
-      const wag = Math.sin(frame / 2) * 0.9;
+      // ogon jak pioropusz, zarzucony na grzbiet
+      const wag = Math.sin(frame / 2) * 0.5;
       ctx.save();
-      ctx.translate(-26, -16);
-      ctx.rotate(-0.6 + wag);
-      ctx.beginPath();
-      ctx.ellipse(-10, 0, 11, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.translate(-26, -14);
+      ctx.rotate(-1.1 + wag);
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(-6 - i * 5, i % 2 === 0 ? -2 : 2, 8, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
 
-      const legSwing = puppy.isJumping ? 0 : Math.sin(frame / 4) * 5;
-      ctx.fillRect(-22 + legSwing, 0, 5, 12);
-      ctx.fillRect(-4 - legSwing, 0, 5, 12);
-      ctx.strokeRect(-22 + legSwing, 0, 5, 12);
-      ctx.strokeRect(-4 - legSwing, 0, 5, 12);
+      // lapki ledwo wystaja spod siersci
+      const legSwing = puppy.isJumping ? 0 : Math.sin(frame / 4) * 4;
+      ctx.fillRect(-20 + legSwing, 2, 5, 10);
+      ctx.fillRect(-4 - legSwing, 2, 5, 10);
+      ctx.strokeRect(-20 + legSwing, 2, 5, 10);
+      ctx.strokeRect(-4 - legSwing, 2, 5, 10);
 
+      // dluga, prosta siersc: dolna krawedz w fale, prawie do ziemi
       ctx.beginPath();
-      ctx.ellipse(-10, -6, 18, 11, 0, 0, Math.PI * 2);
+      ctx.ellipse(-10, -6, 19, 13, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.ellipse(-25 + i * 8, 4, 6, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // glowa
       ctx.beginPath();
       ctx.arc(8, -18, 11, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = "#EEEEEE";
+      // dlugie, opadajace ucho
       ctx.beginPath();
-      ctx.ellipse(2, -20, 5, 8, 0.3, 0, Math.PI * 2);
+      ctx.ellipse(1, -12, 7, 13, 0.25, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
+      // przedzialek: grzywka opada na boki
+      ctx.beginPath();
+      ctx.ellipse(6, -27, 8, 5, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // rozowa kokardka nad grzywka
+      ctx.fillStyle = "#F48FB1";
+      ctx.beginPath();
+      ctx.ellipse(9, -31, 4, 3, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(15, -31, 4, 3, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#EC407A";
+      ctx.beginPath();
+      ctx.arc(12, -31, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // pyszczek
       ctx.fillStyle = "white";
       ctx.beginPath();
-      ctx.ellipse(18, -14, 7, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(17, -14, 7, 6, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
+      // czarny nosek i okragle ciemne oczy
       ctx.fillStyle = "black";
       ctx.beginPath();
-      ctx.arc(12, -21, 2, 0, Math.PI * 2);
+      ctx.ellipse(23, -15, 3, 2.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(23, -15, 2.5, 0, Math.PI * 2);
+      ctx.arc(12, -21, 2.4, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -1305,6 +1343,37 @@
       ctx.fill();
     }
 
+    // ---- Plusk, gdy Maniek siedzi w jeziorku ----
+    function drawSplash() {
+      const x = dog.x + 30;
+
+      ctx.fillStyle = "#29B6F6";
+      ctx.beginPath();
+      ctx.ellipse(x, GRASS_TOP + 2, 34, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        const r = 16 + ((frame * 1.5 + i * 14) % 28);
+        ctx.globalAlpha = 1 - r / 46;
+        ctx.beginPath();
+        ctx.ellipse(x, GRASS_TOP + 2, r, r / 3.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // kropelki wody
+      ctx.fillStyle = "#B3E5FC";
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2 + frame / 8;
+        const lift = Math.abs(Math.sin(frame / 6 + i)) * 22;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(angle) * 26, GRASS_TOP - 4 - lift, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     function drawPuffs() {
       for (const puff of puffs) {
         ctx.fillStyle = "rgba(255, 255, 255, " + (puff.life / 30) + ")";
@@ -1346,6 +1415,11 @@
     function isPettingPause() {
       // podczas dochodzenia i glaskania plansza stoi
       return girl.state === "walking" || girl.state === "petting";
+    }
+
+    // przerwy, w ktorych Maniek nie moze uciekac, wiec nikt go nie atakuje
+    function isSafePause() {
+      return isPettingPause() || dog.bathing > 0;
     }
 
     function updateGirl() {
@@ -1623,9 +1697,9 @@
         return;
       }
 
-      puppy.x -= gameSpeed + PUPPY_SPEED;
+      puppy.x -= gameSpeed + currentLevel().puppyRush;
 
-      if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < 0.02) {
+      if (!puppy.isJumping && puppy.crouchTimer === 0 && Math.random() < currentLevel().puppyLeap) {
         // GRASS_TOP to wysokosc mapy nad trawa; poziom decyduje, jaka jej czesc piesek przeskakuje
         const maxHeight = GRASS_TOP * currentLevel().puppyJump;
         const height = maxHeight * (0.5 + Math.random() * 0.5);
@@ -1664,12 +1738,10 @@
       coco.reload = COCO_RELOAD;
     }
 
-    function hitByCoco() {
-      getDirty(DOG_GRAY);   // szara kupa Coco: kolor z Grumera znika i Maniek zwalnia
-      takeHit("coco");
+    function loseHeart(message) {
       lives--;
 
-      bannerText = lives > 0 ? "Coco trafiła! Serduszka: " + lives : "Koniec serduszek!";
+      bannerText = lives > 0 ? message + " Serduszka: " + lives : "Koniec serduszek!";
       bannerTimer = 110;
 
       if (lives <= 0) {
@@ -1677,9 +1749,15 @@
       }
     }
 
+    function hitByCoco() {
+      getDirty(DOG_GRAY);   // szara kupa Coco: kolor z Grumera znika i Maniek zwalnia
+      takeHit("coco");
+      loseHeart("Coco trafiła!");
+    }
+
     function updateCoco() {
-      // glaskanie to bezpieczna przerwa, a ogluszony Maniek i tak nie ucieknie
-      if (isPettingPause() || dog.stun > 0) {
+      // glaskanie i kapiel to bezpieczne przerwy, a ogluszony Maniek i tak nie ucieknie
+      if (isSafePause() || dog.stun > 0) {
         return;
       }
 
@@ -1748,19 +1826,18 @@
     }
 
     function eatFeather() {
-      if (lives < START_LIVES) {
+      // piorko daje serduszko takze ponad zwykle trzy
+      if (lives < MAX_LIVES) {
         lives++;
-        bannerText = "Piórko! Serduszka: " + lives;
-      } else {
-        bannerText = "Pyszne piórko!";
       }
 
+      bannerText = "Piórko! Serduszka: " + lives;
       bannerTimer = 90;
       addPuff(dog.x + 30, dog.y - 30);
     }
 
     function updateFeathers() {
-      if (isPettingPause() || dog.stun > 0) {
+      if (isSafePause() || dog.stun > 0) {
         return;
       }
 
@@ -1789,7 +1866,7 @@
     }
 
     function updateBombs() {
-      if (isPettingPause() || dog.stun > 0) {
+      if (isSafePause() || dog.stun > 0) {
         return;
       }
 
@@ -1850,6 +1927,7 @@
       dog.color = DOG_BROWN;
       dog.dirt = 0;
       dog.yuck = 0;
+      dog.bathing = 0;
     }
 
     function endGame() {
@@ -1973,6 +2051,15 @@
           // podczas glaskania plansza czeka - to bezpieczna przerwa
           gameSpeed = 0;
           dog.speedY = 0;
+        } else if (dog.bathing > 0) {
+          // kapiel: Maniek siedzi w wodzie, plansza czeka
+          gameSpeed = 0;
+          dog.speedY = 0;
+          dog.bathing--;
+
+          if (dog.bathing === 0) {
+            washDog();
+          }
         } else {
           gameSpeed = gameSpeed + (currentLevel().speed - gameSpeed) * 0.08;
           levelFrame++;
@@ -2073,9 +2160,13 @@
       for (const pond of ponds) {
         pond.x -= gameSpeed;
 
-        // brudny Maniek wskakuje i wychodzi czysty; czystemu jeziorko nic nie robi
-        if (dog.dirt > 0 && overlaps(box, pond.x, pond.x + pond.width, GRASS_TOP - 16, GRASS_TOP + 10)) {
-          washDog();
+        // brudny Maniek wpada do wody na chwile; czystemu jeziorko nic nie robi
+        if (dog.dirt > 0 && dog.bathing === 0 &&
+            overlaps(box, pond.x, pond.x + pond.width, GRASS_TOP - 16, GRASS_TOP + 10)) {
+          dog.bathing = BATH_TIME;
+          dog.speedY = 0;
+          dog.isJumping = false;
+          dog.y = GROUND_Y;
         }
       }
       ponds = ponds.filter(p => p.x + p.width > 0);
@@ -2107,6 +2198,7 @@
             }
           } else {
             takeHit("piesek");
+            loseHeart("Benio złapał Mańka!");
           }
         }
       }
@@ -2138,7 +2230,16 @@
       bombs.forEach(drawBomb);
       feathers.forEach(drawFeather);
       drawPuffs();
-      drawDog();
+      if (dog.bathing > 0) {
+        ctx.save();
+        ctx.translate(0, 16);   // zanurzony po brzuch
+        drawDog();
+        ctx.restore();
+        drawSplash();
+      } else {
+        drawDog();
+      }
+
       drawHearts();
 
       // ---- liczniki ----
@@ -2151,7 +2252,8 @@
       ctx.fillText("Poziom: " + (level + 1) + " / " + LEVELS.length, 600, 26);
 
       // serduszka
-      for (let i = 0; i < START_LIVES; i++) {
+      const heartSlots = Math.max(START_LIVES, lives);
+      for (let i = 0; i < heartSlots; i++) {
         drawHeart(620 + i * 26, 45, i < lives);
       }
 
