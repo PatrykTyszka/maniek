@@ -267,6 +267,27 @@
     const BOOST_TIME = 480;     // jak dlugo Maniek biega szybciej
     const BOOST_MULTIPLIER = 2; // ile razy szybciej
 
+    // ---- Kolory Manka ----
+    // body - cialo, ear - ciemniejszy odcien na ucho
+    const DOG_BROWN = { name: "brazowy", body: "#8B5A2B", ear: "#6B4423" };
+    const DOG_COLORS = [
+      { name: "czerwony",    body: "#E53935", ear: "#B71C1C" },
+      { name: "pomaranczowy", body: "#FB8C00", ear: "#E65100" },
+      { name: "zolty",       body: "#FDD835", ear: "#F9A825" },
+      { name: "zielony",     body: "#43A047", ear: "#2E7D32" },
+      { name: "niebieski",   body: "#1E88E5", ear: "#1565C0" },
+      { name: "granatowy",   body: "#3949AB", ear: "#283593" },
+      { name: "fioletowy",   body: "#8E24AA", ear: "#6A1B9A" },
+      { name: "czarny",      body: "#212121", ear: "#000000" },
+      { name: "rozowy",      body: "#E75480", ear: "#C2185B" }
+    ];
+
+    // ---- Grumer: domek na platformie, w ktorym Maniek zmienia kolor ----
+    const GRUMER_WIDTH = 56;
+    const GRUMER_HEIGHT = 46;
+    const GRUMER_PLATFORM_WIDTH = 90;
+    const GRUMER_PLATFORM_HEIGHT = 60;
+
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
     // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
@@ -298,7 +319,8 @@
       stunKind: "",
       invincible: 0,
       sitting: false,   // siedzi, gdy Zuzia go glaszcze
-      boost: 0          // gdy > 0, biega szybciej po poglaskaniu
+      boost: 0,         // gdy > 0, biega szybciej po poglaskaniu
+      color: DOG_BROWN  // zmienia sie w Grumerze, wraca po wdepnieciu w kupke
     };
 
     // ---- Bialy piesek ----
@@ -321,6 +343,7 @@
     let running = false;
     let obstacles = [];
     let rocks = [];
+    let grumers = [];
     let bowls = [];
     let puffs = [];
     let level = 0;
@@ -609,7 +632,7 @@
         return;
       }
 
-      ctx.fillStyle = "#8B5A2B";
+      ctx.fillStyle = dog.color.body;
 
       const isRunning = !dog.isJumping && dog.stun === 0 && !dog.sitting;
       const walkingBack = keys["ArrowLeft"];
@@ -641,7 +664,7 @@
           ctx.lineTo(dog.x - 8 - (frame % 10), y);
           ctx.stroke();
         }
-        ctx.fillStyle = "#8B5A2B";
+        ctx.fillStyle = dog.color.body;
       }
 
       ctx.beginPath();
@@ -655,7 +678,7 @@
       ctx.arc(dog.x + 44, dog.y - 36, 8, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "#6B4423";
+      ctx.fillStyle = dog.color.ear;
       ctx.beginPath();
       ctx.arc(dog.x + 38, dog.y - 22, 8, 0, Math.PI * 2);
       ctx.fill();
@@ -670,7 +693,7 @@
       ctx.arc(dog.x + 40, dog.y - 3, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "#8B5A2B";
+      ctx.fillStyle = dog.color.body;
       ctx.fillRect(dog.x + 54, dog.y - 26, 12, 8);
 
       if (dog.stun > 0 && dog.stunKind === "kupka") {
@@ -970,6 +993,61 @@
       ctx.fill();
     }
 
+    // ---- Grumer: domek na platformie ----
+    function drawGrumer(g) {
+      const x = g.platform.x + (GRUMER_PLATFORM_WIDTH - GRUMER_WIDTH) / 2;
+      const bottom = GRASS_TOP - g.platform.height;   // podloga domku = wierzch platformy
+      const top = bottom - GRUMER_HEIGHT;
+
+      // sciana
+      ctx.fillStyle = "#F3E0C0";
+      ctx.fillRect(x, bottom - 30, GRUMER_WIDTH, 30);
+      ctx.strokeStyle = "#B99B6B";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, bottom - 30, GRUMER_WIDTH, 30);
+
+      // dach - fioletowy, zeby nie mylil sie z czerwona buda
+      ctx.fillStyle = "#7B4B94";
+      ctx.beginPath();
+      ctx.moveTo(x - 7, bottom - 28);
+      ctx.lineTo(x + GRUMER_WIDTH / 2, top);
+      ctx.lineTo(x + GRUMER_WIDTH + 7, bottom - 28);
+      ctx.closePath();
+      ctx.fill();
+
+      // komin i dymek
+      ctx.fillStyle = "#8D6E63";
+      ctx.fillRect(x + GRUMER_WIDTH - 16, top + 4, 8, 14);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(x + GRUMER_WIDTH - 12, top - 2 - i * 8 - (frame / 6) % 8, 3 + i * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // drzwi
+      ctx.fillStyle = "#4A2C12";
+      ctx.beginPath();
+      ctx.arc(x + GRUMER_WIDTH / 2, bottom - 16, 9, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(x + GRUMER_WIDTH / 2 - 9, bottom - 16, 18, 16);
+
+      // kolorowe okienko - podpowiedz, ze tu sie zmienia kolor
+      const hint = DOG_COLORS[Math.floor(frame / 20) % DOG_COLORS.length];
+      ctx.fillStyle = g.used ? "#CCCCCC" : hint.body;
+      ctx.fillRect(x + 6, bottom - 26, 10, 10);
+      ctx.fillStyle = g.used ? "#CCCCCC" : hint.ear;
+      ctx.fillRect(x + GRUMER_WIDTH - 16, bottom - 26, 10, 10);
+
+      // szyld
+      ctx.fillStyle = "#7B4B94";
+      ctx.font = "13px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("GRUMER", x + GRUMER_WIDTH / 2, top - 8);
+      ctx.textAlign = "left";
+    }
+
     // ---- Miski ----
     function drawBowl(bowl) {
       const bottom = GRASS_TOP - 2;
@@ -1088,6 +1166,19 @@
       }
     }
 
+    function enterGrumer(g) {
+      g.used = true;
+
+      const newColor = DOG_COLORS[Math.floor(Math.random() * DOG_COLORS.length)];
+      dog.color = newColor;
+
+      const x = g.platform.x + GRUMER_PLATFORM_WIDTH / 2;
+      addPuff(x, GRASS_TOP - g.platform.height - 20);
+
+      bannerText = "Maniek jest " + newColor.name + "!";
+      bannerTimer = 90;
+    }
+
     function takeHit(kind) {
       dog.stun = STUN_TIME;
       dog.stunKind = kind;
@@ -1106,6 +1197,7 @@
         // czyscimy teren, zeby Maniek mial gdzie wrocic
         obstacles = [];
         rocks = [];
+        grumers = [];
         dog.x = 80;
         dog.y = GROUND_Y;
         dog.speedY = 0;
@@ -1223,6 +1315,20 @@
       rockCooldown = 260;   // przez ten czas nie dokladamy przeszkod
     }
 
+    function addGrumer() {
+      // platforma to zwykla skala - Maniek moze na niej stanac i odbic sie od boku
+      const platform = {
+        x: canvas.width,
+        width: GRUMER_PLATFORM_WIDTH,
+        height: GRUMER_PLATFORM_HEIGHT
+      };
+
+      rocks.push(platform);
+      grumers.push({ platform: platform, used: false });
+
+      rockCooldown = 260;   // przez ten czas nie dokladamy przeszkod
+    }
+
     function addBowl() {
       bowls.push({ x: canvas.width, width: 30, eaten: false });
     }
@@ -1287,6 +1393,7 @@
       gameSpeed = LEVELS[newLevel].speed;
       obstacles = [];
       rocks = [];
+      grumers = [];
       bowls = [];
       puffs = [];
       rockCooldown = 120;
@@ -1303,6 +1410,7 @@
       dog.invincible = 60;
       dog.sitting = false;
       dog.boost = 0;
+      dog.color = DOG_BROWN;
     }
 
     function resetEverything() {
@@ -1371,7 +1479,9 @@
             if (frame % currentLevel().spawnEvery === 0) {
               addObstacle();
             }
-            if (currentLevel().rocks && frame % 330 === 0) {
+            if (currentLevel().rocks && frame % 810 === 0) {
+              addGrumer();
+            } else if (currentLevel().rocks && frame % 330 === 0) {
               addRockGroup();
             }
           }
@@ -1400,6 +1510,17 @@
 
       const box = dogBox();
 
+      // ---- Grumer ----
+      for (const g of grumers) {
+        const floor = GRASS_TOP - g.platform.height;
+        const left = g.platform.x + (GRUMER_PLATFORM_WIDTH - GRUMER_WIDTH) / 2;
+
+        if (!g.used && overlaps(box, left, left + GRUMER_WIDTH, floor - GRUMER_HEIGHT, floor)) {
+          enterGrumer(g);
+        }
+      }
+      grumers = grumers.filter(g => g.platform.x + g.platform.width > -50);
+
       // ---- przeszkody ----
       for (const o of obstacles) {
         o.x -= gameSpeed;
@@ -1421,6 +1542,7 @@
           o.passed = true;
           if (o.type === "kupka") {
             poopsStepped++;
+            dog.color = DOG_BROWN;   // po kupce kolor z Grumera znika
           }
         }
 
@@ -1474,6 +1596,7 @@
       // ---- rysowanie ----
       bowls.forEach(drawBowl);
       rocks.forEach(drawRock);
+      grumers.forEach(drawGrumer);
       obstacles.forEach(drawObstacle);
       drawPuppy();
       drawPuffs();
