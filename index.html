@@ -258,6 +258,12 @@
     const JUMP_POWER = 12;
     const MOVE_SPEED = 3.5;
     const STUN_TIME = 50;
+    // Cala gra jest policzona na 60 krokow na sekunde - tak chodzi na telefonie.
+    // Ekran 120 Hz odswieza sie dwa razy czesciej, wiec bez tego gra bylaby
+    // tam dwa razy szybsza. Krok jest staly, a rysujemy tyle razy, ile zdazymy.
+    const STEP_MS = 1000 / 60;
+    const MAX_STEPS_PER_FRAME = 5;   // po powrocie z tla nie nadrabiamy pol minuty naraz
+
     const START_LIVES = 3;
     const MAX_LIVES = 6;          // piorka moga dolozyc serduszek ponad trzy
     const BOWLS_PER_HEART = 20;   // tyle pudelek karmy oddaje jedno serduszko
@@ -485,7 +491,7 @@
 
       if (!running) {
         running = true;
-        update();
+        startLoop();
       }
     }
 
@@ -2069,7 +2075,6 @@
 
       if (gameOver) {
         drawGameOver();
-        requestAnimationFrame(update);
         return;
       }
 
@@ -2344,7 +2349,42 @@
         ctx.textAlign = "left";
       }
 
-      requestAnimationFrame(update);
+    }
+
+    // ---- Petla: stale 60 krokow gry na sekunde, niezaleznie od ekranu ----
+    let lastTime = 0;
+    let started = false;   // zero to poprawny znacznik czasu, wiec start pilnuje osobna flaga
+    let leftover = 0;      // czas, ktory nie zlozyl sie jeszcze na pelny krok
+
+    function loop(now) {
+      if (!running) {
+        return;
+      }
+
+      requestAnimationFrame(loop);
+
+      if (!started) {
+        started = true;
+        lastTime = now;
+        return;
+      }
+
+      leftover += Math.min(now - lastTime, STEP_MS * MAX_STEPS_PER_FRAME);
+      lastTime = now;
+
+      let steps = 0;
+      while (leftover >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
+        leftover -= STEP_MS;
+        steps++;
+        update();
+      }
+    }
+
+    function startLoop() {
+      started = false;
+      lastTime = 0;
+      leftover = 0;
+      requestAnimationFrame(loop);
     }
   </script>
 </body>
