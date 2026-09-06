@@ -291,6 +291,16 @@
     const GRUMER_FIRST = 700;    // po tylu klatkach poziomu pojawia sie pierwszy Grumer
     const GRUMER_EVERY = 1800;   // i co tyle klatek nastepny
 
+    // ---- Coco: papuzka falista, ktora probuje okupac Manka ----
+    const COCO_Y = 44;           // lata pod gorna krawedzia mapy
+    const COCO_SPEED = 1.6;      // goni Manka wolniej, niz on biega - da sie uciec
+    const COCO_WARNING = 40;     // klatki ostrzezenia, zanim spadnie kupa
+    const COCO_DROPS = 2;        // ile razy zrzuca w trakcie jednego przylotu
+    const COCO_RELOAD = 90;      // przerwa miedzy zrzutami
+    const COCO_LIFE = 480;       // po tylu klatkach odlatuje, nawet jesli nie trafila
+    const COCO_FIRST = 500;      // pierwsza Coco w poziomie
+    const COCO_EVERY = 1100;     // i co tyle klatek nastepna
+
     // ---- Piec poziomow gry ----
     // speed      - jak szybko jedzie plansza (stala przez caly poziom)
     // duration   - jak dlugo trwa poziom (w klatkach, 60 klatek = 1 sekunda)
@@ -299,12 +309,13 @@
     // spawnEvery - co ile klatek pojawia sie przeszkoda
     // types      - jakie przeszkody moga sie pojawic
     // rocks      - czy sa skaly do przeskakiwania
+    // coco       - czy przylatuje papuzka Coco
     const LEVELS = [
-      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, spawnEvery: 190, types: ["kupka"], rocks: false },
-      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, spawnEvery: 175, types: ["kupka", "buda"], rocks: false },
-      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, spawnEvery: 170, types: ["kupka", "buda"], rocks: true },
-      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, spawnEvery: 160, types: ["kupka", "buda"], rocks: true },
-      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, spawnEvery: 150, types: ["kupka", "buda"], rocks: true }
+      { speed: 2.5, duration: 2400, puppies: 1,  puppyJump: 0.33, spawnEvery: 190, types: ["kupka"], rocks: false, coco: false },
+      { speed: 2.9, duration: 2600, puppies: 2,  puppyJump: 0.45, spawnEvery: 175, types: ["kupka", "buda"], rocks: false, coco: false },
+      { speed: 3.3, duration: 2800, puppies: 5,  puppyJump: 0.57, spawnEvery: 170, types: ["kupka", "buda"], rocks: true, coco: true },
+      { speed: 3.7, duration: 3000, puppies: 10, puppyJump: 0.68, spawnEvery: 160, types: ["kupka", "buda"], rocks: true, coco: true },
+      { speed: 4.1, duration: 3200, puppies: 15, puppyJump: 0.80, spawnEvery: 150, types: ["kupka", "buda"], rocks: true, coco: true }
     ];
 
     const SIZES = {
@@ -331,6 +342,19 @@
       x: 900, y: GROUND_Y, speedY: 0,
       isJumping: false, crouchTimer: 0, active: false
     };
+
+    // ---- Coco ----
+    const coco = {
+      x: 0,
+      active: false,
+      warning: 0,      // > 0: zawisla i piszczy, zaraz zrzuci
+      reload: 0,       // przerwa po zrzucie
+      drops: 0,        // ile zrzutow jej zostalo
+      life: 0,         // po tylu klatkach odlatuje
+      leaving: false
+    };
+    let bombs = [];    // kupy lecace z gory
+    let cocoTimer = 0; // odliczanie do nastepnego przylotu
 
     // ---- Zuzia: chodzi do Manka i glaszcze go ----
     const girl = {
@@ -808,6 +832,105 @@
       ctx.restore();
     }
 
+    // ---- Coco: papuga falista, bialo-niebieska ----
+    function drawCoco() {
+      if (!coco.active) {
+        return;
+      }
+
+      const x = coco.x;
+      const y = COCO_Y;
+
+      // ogon
+      ctx.fillStyle = "#1565C0";
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y - 2);
+      ctx.lineTo(x + 38, y - 8);
+      ctx.lineTo(x + 38, y + 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // cialo
+      ctx.fillStyle = "#2196F3";
+      ctx.beginPath();
+      ctx.ellipse(x + 5, y, 17, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // bialy brzuszek
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.ellipse(x + 1, y + 5, 13, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // czarne kropki na grzbiecie
+      ctx.fillStyle = "black";
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(x - 4 + i * 7, y - 8 + (i % 2) * 1.5, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // biala glowa
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(x - 12, y - 5, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      // dziob
+      ctx.fillStyle = "#FF9800";
+      ctx.beginPath();
+      ctx.moveTo(x - 19, y - 4);
+      ctx.lineTo(x - 27, y);
+      ctx.lineTo(x - 18, y + 3);
+      ctx.closePath();
+      ctx.fill();
+
+      // czarna kropka obok dzioba i oko
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(x - 16, y + 3, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x - 13, y - 8, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // skrzydlo - macha
+      const flap = Math.sin(frame / 4) * 9;
+      ctx.fillStyle = "#1565C0";
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 3);
+      ctx.lineTo(x + 17, y - 11 - flap);
+      ctx.lineTo(x - 5, y - 9 - flap * 0.4);
+      ctx.closePath();
+      ctx.fill();
+
+      // ostrzezenie: wykrzyknik nad Coco i cien na trawie
+      if (coco.warning > 0 && frame % 8 < 5) {
+        ctx.fillStyle = "#E00000";
+        ctx.font = "bold 22px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("!", x, y - 18);
+        ctx.textAlign = "left";
+      }
+
+      if (coco.warning > 0) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.beginPath();
+        ctx.ellipse(x, GRASS_TOP - 2, 15, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawBomb(bomb) {
+      ctx.fillStyle = "#5C3317";
+      ctx.beginPath();
+      ctx.ellipse(bomb.x, bomb.y, 7, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(bomb.x, bomb.y - 7, 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // ---- Przeszkody ----
     function drawKupka(o) {
       ctx.fillStyle = "#5C3317";
@@ -1169,6 +1292,7 @@
         obstacles = [];
         rocks = [];
         grumers = [];
+        bombs = [];
         dog.x = 80;
         dog.y = GROUND_Y;
         dog.speedY = 0;
@@ -1362,6 +1486,120 @@
       }
     }
 
+    // ---- Coco ----
+    function sendCocoAway() {
+      coco.active = false;
+      cocoTimer = COCO_EVERY;
+    }
+
+    function dropBomb() {
+      bombs.push({ x: coco.x, y: COCO_Y + 12, speedY: 0 });
+      coco.drops--;
+      coco.reload = COCO_RELOAD;
+    }
+
+    function hitByCoco() {
+      dog.color = DOG_BROWN;   // okupany Maniek traci kolor
+      takeHit("coco");
+      lives--;
+
+      bannerText = lives > 0 ? "Coco trafiła! Serduszka: " + lives : "Koniec serduszek!";
+      bannerTimer = 110;
+
+      if (lives <= 0) {
+        startLevel(level, START_LIVES);   // ten sam etap od nowa
+      }
+    }
+
+    function updateCoco() {
+      // glaskanie to bezpieczna przerwa, a ogluszony Maniek i tak nie ucieknie
+      if (isPettingPause() || dog.stun > 0) {
+        return;
+      }
+
+      if (!coco.active) {
+        if (!currentLevel().coco) {
+          return;
+        }
+
+        if (cocoTimer > 0) {
+          cocoTimer--;
+          return;
+        }
+
+        coco.active = true;
+        coco.x = canvas.width + 40;
+        coco.warning = 0;
+        coco.reload = 0;
+        coco.drops = COCO_DROPS;
+        coco.life = COCO_LIFE;
+        coco.leaving = false;
+        return;
+      }
+
+      coco.life--;
+
+      if (coco.leaving || coco.drops === 0 || coco.life <= 0) {
+        coco.leaving = true;
+        coco.x -= 5;
+        if (coco.x < -60) {
+          sendCocoAway();
+        }
+        return;
+      }
+
+      if (coco.warning > 0) {
+        coco.warning--;   // zawisla nad Mankiem i piszczy
+        if (coco.warning === 0) {
+          dropBomb();
+        }
+        return;
+      }
+
+      if (coco.reload > 0) {
+        coco.reload--;
+      }
+
+      // goni Manka, ale wolniej niz on biega - da sie uciec
+      const target = dog.x + 30;
+      const distance = target - coco.x;
+
+      // martwa strefa, zeby Coco nie dygotala, przeskakujac cel tam i z powrotem
+      if (Math.abs(distance) > COCO_SPEED) {
+        coco.x += distance > 0 ? COCO_SPEED : -COCO_SPEED;
+      }
+
+      if (coco.reload === 0 && Math.abs(coco.x - target) < 20) {
+        coco.warning = COCO_WARNING;
+      }
+    }
+
+    function updateBombs() {
+      if (isPettingPause() || dog.stun > 0) {
+        return;
+      }
+
+      const box = dogBox();
+
+      for (const bomb of bombs) {
+        bomb.speedY += GRAVITY;
+        bomb.y += bomb.speedY;
+
+        if (!bomb.done && dog.stun === 0 && dog.invincible === 0 &&
+            overlaps(box, bomb.x - 7, bomb.x + 7, bomb.y - 12, bomb.y + 9)) {
+          bomb.done = true;
+          hitByCoco();
+        }
+
+        if (!bomb.done && bomb.y >= GRASS_TOP) {
+          bomb.done = true;      // chybiona kupa pryska i znika
+          addPuff(bomb.x, GRASS_TOP - 6);
+        }
+      }
+
+      bombs = bombs.filter(b => !b.done);
+    }
+
     // ---- Poziomy ----
     function startLevel(newLevel, newLives) {
       level = newLevel;
@@ -1377,6 +1615,9 @@
       puffs = [];
       rockCooldown = 120;
       grumerTimer = GRUMER_FIRST;
+      cocoTimer = COCO_FIRST;
+      coco.active = false;
+      bombs = [];
       puppy.active = false;
       hearts = [];
       girl.x = GIRL_HOME;
@@ -1478,6 +1719,8 @@
 
         updateGirl();
         updatePuppy();
+        updateCoco();
+        updateBombs();
         checkLevelFinished();
 
         if (dog.boost > 0) {
@@ -1583,6 +1826,8 @@
       grumers.forEach(drawGrumer);
       obstacles.forEach(drawObstacle);
       drawPuppy();
+      drawCoco();
+      bombs.forEach(drawBomb);
       drawPuffs();
       drawDog();
       drawHearts();
