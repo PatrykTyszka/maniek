@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Bingo</title>
+
+  <style>
+    body {
+      background-color: white;
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 8px;
+      -webkit-user-select: none;
+      user-select: none;
+      overscroll-behavior: none;
+    }
+
+    canvas {
+      border: 2px solid #333;
+      background-color: #cdeeff;
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+      touch-action: none;
+    }
+
+    .hidden { display: none !important; }
+
+    #touchControls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .touch-button {
+      font-size: 30px;
+      width: 90px;
+      height: 60px;
+      margin: 0 6px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background-color: #FFE0B2;
+      touch-action: none;
+    }
+
+    #shootButton {
+      width: 170px;
+      background-color: #FF7043;
+      color: white;
+      font-size: 22px;
+    }
+
+    #touchControls .pad {
+      display: inline-flex;
+      gap: 8px;
+    }
+
+    #rotateNote {
+      display: none;
+      padding: 60px 20px;
+      font-size: 20px;
+      line-height: 1.5;
+    }
+
+    /* ---- TELEFON W PIONIE: prosimy o obrocenie ---- */
+    @media (max-width: 950px) and (orientation: portrait) {
+      #rotateNote { display: block !important; }
+      h1, #topBar, #game, #touchControls { display: none !important; }
+    }
+
+    /* ---- TELEFON POZIOMO: plansza na caly ekran ---- */
+    @media (max-height: 520px) and (orientation: landscape) {
+      body {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+      }
+
+      h1, #topBar p { display: none; }
+      #topBar { margin: 0; }
+      #whoPlays { display: none; }
+
+      #backButton {
+        position: fixed;
+        top: 4px;
+        right: calc(8px + env(safe-area-inset-right));
+        padding: 2px 8px;
+        font-size: 13px;
+        z-index: 5;
+      }
+
+      canvas {
+        aspect-ratio: 2 / 1;
+        width: min(100vw, calc((100vh - 92px) * 2));
+        width: min(100vw, calc((100dvh - 92px) * 2));
+        max-width: 100vw;
+        height: auto;
+        border: none;
+      }
+
+      #touchControls {
+        position: fixed;
+        bottom: calc(6px + env(safe-area-inset-bottom));
+        left: calc(6px + env(safe-area-inset-left));
+        right: calc(6px + env(safe-area-inset-right));
+        display: flex;
+        justify-content: space-between;
+        margin: 0;
+        z-index: 4;
+      }
+
+      .touch-button {
+        width: 84px;
+        height: 74px;
+        margin: 0;
+        font-size: 28px;
+      }
+
+      #shootButton { width: 130px; font-size: 18px; }
+
+      #menu {
+        margin: 0 auto;
+        padding: 10px;
+        max-height: 95vh;
+        overflow-y: auto;
+      }
+      #menu h2 { font-size: 18px; margin: 4px; }
+      #menu h3 { font-size: 15px; margin: 6px; }
+    }
+
+    #menu {
+      max-width: 420px;
+      margin: 20px auto;
+      padding: 20px;
+      border: 2px solid #333;
+      border-radius: 12px;
+      background-color: #fff8f0;
+    }
+
+    #playerName {
+      font-size: 18px;
+      padding: 6px;
+      width: 200px;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 6px 14px;
+      margin: 4px;
+      cursor: pointer;
+    }
+
+    .player-button {
+      background-color: #FF7043;
+      color: white;
+      border: none;
+      border-radius: 8px;
+    }
+
+    #game { display: none; }
+
+    #topBar {
+      display: none;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bingo</h1>
+
+  <!-- ---- Menu przed gra ---- -->
+  <div id="menu">
+    <h2>Kto dzisiaj gra?</h2>
+    <input id="playerName" placeholder="Wpisz imię" maxlength="12">
+    <button id="startButton">Graj!</button>
+
+    <h3>Gracze, którzy już grali:</h3>
+    <div id="playersList">Jeszcze nikt tu nie grał.</div>
+  </div>
+
+  <!-- ---- Gra ---- -->
+  <div id="topBar">
+    <span id="whoPlays"></span>
+    <button id="backButton">Zmień gracza</button>
+    <p>Strzałki &uarr; &darr; = celowanie, SPACJA = strzał</p>
+  </div>
+
+  <canvas id="game" width="800" height="400"></canvas>
+
+  <!-- ---- Przyciski do grania palcem na telefonie ---- -->
+  <div id="touchControls" class="hidden">
+    <div class="pad">
+      <button class="touch-button" id="upButton">&uarr;</button>
+      <button class="touch-button" id="downButton">&darr;</button>
+    </div>
+    <div class="pad">
+      <button class="touch-button" id="shootButton">STRZAŁ</button>
+    </div>
+  </div>
+
+  <!-- ---- Prosba o obrocenie telefonu ---- -->
+  <div id="rotateNote">
+    <p style="font-size:26px">🔄</p>
+    <p>Obróć telefon poziomo,<br>żeby grać w Bingo!</p>
+  </div>
+
+  <script>
+    // ---- Podstawowe ustawienia gry ----
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const GROUND_Y = 360;          // podloga
+    const BINGO_X = 66;            // gdzie stoi Bingo
+    const GUN_X = 104;             // os obrotu lufy
+    const GUN_Y = 286;
+    const GUN_LENGTH = 42;
+
+    const AIM_UP = -Math.PI / 3;   // 60 stopni w gore
+    const AIM_DOWN = Math.PI / 3;  // i w dol
+    const AIM_SPEED = 0.035;
+
+    const BALL_SPEED = 9;
+    const BALL_RADIUS = 7;
+    const SHOT_COOLDOWN = 10;      // klatki miedzy strzalami
+
+    const TABLET_W = 44;
+    const TABLET_H = 60;
+    const TABLET_LEFT = 250;       // blizej Bingo tablety nie podlatuja
+    const TABLET_RIGHT = 780;
+    const TABLET_TOP = 40;
+    const TABLET_BOTTOM = 330;
+    const TABLET_WAVE = 52;        // o tyle tablet faluje w gore i w dol na drugiej planszy
+
+    const POINTS_PER_TABLET = 10;
+    const POINTS_PER_BOARD = 50;
+    const BOARD_PAUSE = 100;       // przerwa miedzy planszami
+
+    // Cala gra jest policzona na 60 krokow na sekunde. Ekran 120 Hz odswieza sie
+    // dwa razy czesciej, wiec bez stalego kroku gra bylaby tam dwa razy szybsza.
+    const STEP_MS = 1000 / 60;
+    const MAX_STEPS_PER_FRAME = 5;
+
+    // ---- Trzy plansze ----
+    // count  - ile tabletow
+    // speed  - jak szybko lataja
+    // motion - "poziomo" | "fala" | "ukos"
+    // hits   - ile trafien wytrzymuje jeden tablet
+    const BOARDS = [
+      { name: "Salon",    count: 4, speed: 1.6, motion: "poziomo", hits: 1 },
+      { name: "Ogród",    count: 6, speed: 2.2, motion: "fala",    hits: 1 },
+      { name: "Poddasze", count: 8, speed: 2.8, motion: "ukos",    hits: 2 }
+    ];
+
+    const SCREEN_COLORS = ["#4FC3F7", "#AED581", "#FFD54F", "#F06292", "#9575CD", "#4DB6AC"];
+
+    // ---- Stan gry ----
+    let playerName = "";
+    let running = false;
+    let aim = 0;                 // kat lufy w radianach
+    let balls = [];
+    let tablets = [];
+    let shards = [];             // odlamki po zbitym tablecie
+    let board = 0;
+    let boardPause = 0;
+    let shotCooldown = 0;
+    let score = 0;
+    let shotsFired = 0;
+    let shotsHit = 0;
+    let bannerText = "";
+    let bannerTimer = 0;
+    let gameWon = false;
+    let frame = 0;
+
+    function currentBoard() {
+      return BOARDS[board];
+    }
+
+    function accuracy() {
+      return shotsFired === 0 ? 100 : Math.round((shotsHit / shotsFired) * 100);
+    }
+
+    // ================= MENU I GRACZE =================
+
+    const STORAGE_KEY = "bingo-gracze";
+
+    function loadPlayers() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function savePlayers(players) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(players));
+    }
+
+    function rememberPlayer(name, points) {
+      const players = loadPlayers();
+      const found = players.find(p => p.name === name);
+
+      if (found) {
+        found.best = Math.max(found.best, points);
+      } else {
+        players.push({ name: name, best: points });
+      }
+
+      savePlayers(players);
+    }
+
+    function showPlayersList() {
+      const list = document.getElementById("playersList");
+      const players = loadPlayers();
+      list.innerHTML = "";
+
+      if (players.length === 0) {
+        list.textContent = "Jeszcze nikt tu nie grał.";
+        return;
+      }
+
+      for (const player of players) {
+        const button = document.createElement("button");
+        button.className = "player-button";
+        button.textContent = player.name + " (" + player.best + " pkt)";
+        button.addEventListener("click", function () {
+          startGame(player.name);
+        });
+        list.appendChild(button);
+      }
+    }
+
+    function startGame(name) {
+      playerName = name;
+      document.getElementById("menu").style.display = "none";
+      document.getElementById("topBar").style.display = "block";
+      document.getElementById("game").style.display = "inline-block";
+      document.getElementById("touchControls").classList.remove("hidden");
+      document.getElementById("whoPlays").textContent = "Gra: " + name;
+
+      resetEverything();
+
+      if (!running) {
+        running = true;
+        startLoop();
+      }
+    }
+
+    function backToMenu() {
+      rememberPlayer(playerName, score);
+      running = false;
+      document.getElementById("menu").style.display = "block";
+      document.getElementById("topBar").style.display = "none";
+      document.getElementById("game").style.display = "none";
+      document.getElementById("touchControls").classList.add("hidden");
+      showPlayersList();
+    }
+
+    document.getElementById("startButton").addEventListener("click", function () {
+      const name = document.getElementById("playerName").value.trim();
+      if (name.length > 0) {
+        startGame(name);
+      }
+    });
+
+    document.getElementById("playerName").addEventListener("keydown", function (event) {
+      if (event.code === "Enter") {
+        document.getElementById("startButton").click();
+      }
+    });
+
+    document.getElementById("backButton").addEventListener("click", backToMenu);
+
+    showPlayersList();
+
+    // ================= STEROWANIE =================
+
+    const keys = {};
+
+    function shoot() {
+      if (gameWon) {
+        resetEverything();
+        return;
+      }
+
+      if (shotCooldown > 0) {
+        return;
+      }
+
+      shotCooldown = SHOT_COOLDOWN;
+      shotsFired++;
+
+      balls.push({
+        x: GUN_X + Math.cos(aim) * GUN_LENGTH,
+        y: GUN_Y + Math.sin(aim) * GUN_LENGTH,
+        vx: Math.cos(aim) * BALL_SPEED,
+        vy: Math.sin(aim) * BALL_SPEED
+      });
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (!running) {
+        return;
+      }
+      keys[event.code] = true;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        shoot();
+      }
+      if (event.code === "ArrowUp" || event.code === "ArrowDown") {
+        event.preventDefault();
+      }
+    });
+
+    document.addEventListener("keyup", function (event) {
+      keys[event.code] = false;
+    });
+
+    canvas.addEventListener("mousedown", shoot);
+    canvas.addEventListener("touchstart", function (event) {
+      event.preventDefault();
+      shoot();
+    });
+
+    // ---- Przyciski dotykowe: trzymanie strzalki dziala jak trzymanie klawisza ----
+    function holdKey(button, code) {
+      function press(event) {
+        event.preventDefault();
+        keys[code] = true;
+      }
+      function release(event) {
+        event.preventDefault();
+        keys[code] = false;
+      }
+
+      button.addEventListener("touchstart", press);
+      button.addEventListener("touchend", release);
+      button.addEventListener("touchcancel", release);
+      button.addEventListener("mousedown", press);
+      button.addEventListener("mouseup", release);
+      button.addEventListener("mouseleave", release);
+    }
+
+    holdKey(document.getElementById("upButton"), "ArrowUp");
+    holdKey(document.getElementById("downButton"), "ArrowDown");
+
+    document.getElementById("shootButton").addEventListener("touchstart", function (event) {
+      event.preventDefault();
+      shoot();
+    });
+    document.getElementById("shootButton").addEventListener("mousedown", shoot);
+
+    // ================= RYSOWANIE =================
+
+    function drawGround() {
+      ctx.fillStyle = "#8D6E63";
+      ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+      ctx.fillStyle = "#6D4C41";
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.fillRect(x, GROUND_Y, 2, canvas.height - GROUND_Y);
+      }
+
+      // chmurki w tle
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      for (let i = 0; i < 3; i++) {
+        const x = 140 + i * 240;
+        const y = 60 + i * 18;
+        ctx.beginPath();
+        ctx.arc(x, y, 20, 0, Math.PI * 2);
+        ctx.arc(x + 22, y + 4, 15, 0, Math.PI * 2);
+        ctx.arc(x - 22, y + 5, 14, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ---- Bingo: pomaranczowa psinka z pistoletem na kulki ----
+    function drawBingo() {
+      const feetY = GROUND_Y;
+      const bodyTop = feetY - 90;
+
+      // ogon
+      ctx.fillStyle = "#F57C00";
+      ctx.save();
+      ctx.translate(BINGO_X - 20, feetY - 62);
+      ctx.rotate(-0.5 + Math.sin(frame / 18) * 0.15);
+      ctx.beginPath();
+      ctx.ellipse(-12, 0, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // nogi
+      ctx.fillStyle = "#EF6C00";
+      ctx.fillRect(BINGO_X - 12, feetY - 26, 10, 26);
+      ctx.fillRect(BINGO_X + 4, feetY - 26, 10, 26);
+
+      // lapki
+      ctx.fillStyle = "#FFE0B2";
+      ctx.fillRect(BINGO_X - 14, feetY - 6, 14, 6);
+      ctx.fillRect(BINGO_X + 2, feetY - 6, 14, 6);
+
+      // tulow
+      ctx.fillStyle = "#FB8C00";
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X, feetY - 52, 22, 30, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // jasny brzuszek
+      ctx.fillStyle = "#FFE0B2";
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X + 8, feetY - 46, 12, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // glowa
+      ctx.fillStyle = "#FB8C00";
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X + 2, bodyTop + 6, 21, 19, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // uszy
+      ctx.fillStyle = "#EF6C00";
+      ctx.beginPath();
+      ctx.moveTo(BINGO_X - 12, bodyTop - 4);
+      ctx.lineTo(BINGO_X - 18, bodyTop - 22);
+      ctx.lineTo(BINGO_X - 1, bodyTop - 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(BINGO_X + 10, bodyTop - 6);
+      ctx.lineTo(BINGO_X + 8, bodyTop - 24);
+      ctx.lineTo(BINGO_X + 20, bodyTop - 8);
+      ctx.closePath();
+      ctx.fill();
+
+      // jasny pyszczek
+      ctx.fillStyle = "#FFE0B2";
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X + 16, bodyTop + 12, 12, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // nosek, oko i usmiech
+      ctx.fillStyle = "#3E2723";
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X + 27, bodyTop + 9, 4, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(BINGO_X + 10, bodyTop + 1, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#3E2723";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(BINGO_X + 20, bodyTop + 14, 5, 0.2, Math.PI - 0.5);
+      ctx.stroke();
+
+      drawGun();
+    }
+
+    function drawGun() {
+      ctx.save();
+      ctx.translate(GUN_X, GUN_Y);
+      ctx.rotate(aim);
+
+      // lufa
+      ctx.fillStyle = "#546E7A";
+      ctx.fillRect(0, -7, GUN_LENGTH, 14);
+      ctx.fillStyle = "#78909C";
+      ctx.fillRect(0, -7, GUN_LENGTH, 5);
+
+      // wylot
+      ctx.fillStyle = "#37474F";
+      ctx.fillRect(GUN_LENGTH - 5, -8, 5, 16);
+
+      // zbiorniczek na kulki
+      ctx.fillStyle = "#FF7043";
+      ctx.beginPath();
+      ctx.arc(10, -14, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFCCBC";
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(6 + i * 4, -16 + (i % 2) * 5, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      // lapki trzymajace lufe
+      ctx.fillStyle = "#FFE0B2";
+      ctx.beginPath();
+      ctx.arc(GUN_X + 2, GUN_Y + 2, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ---- Kropkowana linia celowania ----
+    function drawAimLine() {
+      const startX = GUN_X + Math.cos(aim) * (GUN_LENGTH + 4);
+      const startY = GUN_Y + Math.sin(aim) * (GUN_LENGTH + 4);
+
+      ctx.strokeStyle = "rgba(255, 112, 67, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 10]);
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX + Math.cos(aim) * 900, startY + Math.sin(aim) * 900);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawBall(ball) {
+      ctx.fillStyle = "#FF7043";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFCCBC";
+      ctx.beginPath();
+      ctx.arc(ball.x - 2, ball.y - 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawTablet(tablet) {
+      const x = tablet.x;
+      const y = tablet.y;
+
+      // obudowa
+      ctx.fillStyle = "#37474F";
+      ctx.fillRect(x, y, TABLET_W, TABLET_H);
+
+      // ekran
+      ctx.fillStyle = tablet.color;
+      ctx.fillRect(x + 5, y + 8, TABLET_W - 10, TABLET_H - 18);
+
+      // guzik
+      ctx.fillStyle = "#90A4AE";
+      ctx.beginPath();
+      ctx.arc(x + TABLET_W / 2, y + TABLET_H - 5, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ikonki na ekranie
+      ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(x + 9 + (i % 2) * 15, y + 14 + Math.floor(i / 2) * 15, 10, 10);
+      }
+
+      // pekniety ekran po pierwszym trafieniu
+      if (tablet.hits < tablet.maxHits) {
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 10);
+        ctx.lineTo(x + 24, y + 30);
+        ctx.lineTo(x + 14, y + 34);
+        ctx.lineTo(x + 34, y + 50);
+        ctx.moveTo(x + 24, y + 30);
+        ctx.lineTo(x + 36, y + 20);
+        ctx.stroke();
+      }
+    }
+
+    function drawShards() {
+      for (const shard of shards) {
+        ctx.globalAlpha = shard.life / 30;
+        ctx.fillStyle = shard.color;
+        ctx.fillRect(shard.x, shard.y, 6, 6);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ================= LOGIKA =================
+
+    function addTablets() {
+      const setup = currentBoard();
+      tablets = [];
+
+      for (let i = 0; i < setup.count; i++) {
+        const angle = Math.random() < 0.5 ? 1 : -1;
+        const margin = setup.motion === "fala" ? TABLET_WAVE : 0;
+        const top = TABLET_TOP + margin;
+        const bottom = TABLET_BOTTOM - TABLET_H - margin;
+
+        const x = TABLET_LEFT + Math.random() * (TABLET_RIGHT - TABLET_LEFT - TABLET_W);
+        const y = top + Math.random() * (bottom - top);
+
+        tablets.push({
+          x: x,
+          y: y,
+          baseY: y,
+          vx: setup.speed * (Math.random() < 0.5 ? 1 : -1),
+          vy: setup.motion === "ukos" ? setup.speed * angle : 0,
+          phase: Math.random() * Math.PI * 2,
+          hits: setup.hits,
+          maxHits: setup.hits,
+          color: SCREEN_COLORS[i % SCREEN_COLORS.length]
+        });
+      }
+    }
+
+    function moveTablets() {
+      const setup = currentBoard();
+
+      for (const tablet of tablets) {
+        tablet.x += tablet.vx;
+
+        if (tablet.x < TABLET_LEFT) {
+          tablet.x = TABLET_LEFT;
+          tablet.vx = -tablet.vx;
+        }
+        if (tablet.x + TABLET_W > TABLET_RIGHT) {
+          tablet.x = TABLET_RIGHT - TABLET_W;
+          tablet.vx = -tablet.vx;
+        }
+
+        if (setup.motion === "fala") {
+          tablet.y = tablet.baseY + Math.sin(tablet.phase + frame / 26) * TABLET_WAVE;
+        } else if (setup.motion === "ukos") {
+          tablet.y += tablet.vy;
+
+          if (tablet.y < TABLET_TOP) {
+            tablet.y = TABLET_TOP;
+            tablet.vy = -tablet.vy;
+          }
+          if (tablet.y + TABLET_H > TABLET_BOTTOM) {
+            tablet.y = TABLET_BOTTOM - TABLET_H;
+            tablet.vy = -tablet.vy;
+          }
+        }
+      }
+    }
+
+    function addShards(tablet) {
+      for (let i = 0; i < 10; i++) {
+        shards.push({
+          x: tablet.x + Math.random() * TABLET_W,
+          y: tablet.y + Math.random() * TABLET_H,
+          vx: (Math.random() - 0.5) * 6,
+          vy: -Math.random() * 5,
+          life: 30,
+          color: tablet.color
+        });
+      }
+    }
+
+    function hitsTablet(ball, tablet) {
+      return ball.x + BALL_RADIUS > tablet.x &&
+             ball.x - BALL_RADIUS < tablet.x + TABLET_W &&
+             ball.y + BALL_RADIUS > tablet.y &&
+             ball.y - BALL_RADIUS < tablet.y + TABLET_H;
+    }
+
+    function moveBalls() {
+      for (const ball of balls) {
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        for (const tablet of tablets) {
+          if (tablet.hits > 0 && !ball.done && hitsTablet(ball, tablet)) {
+            ball.done = true;
+            tablet.hits--;
+            shotsHit++;
+
+            if (tablet.hits === 0) {
+              score += POINTS_PER_TABLET;
+              addShards(tablet);
+            }
+          }
+        }
+
+        if (ball.x > canvas.width + 20 || ball.y < -20 || ball.y > canvas.height + 20) {
+          ball.done = true;
+        }
+      }
+
+      balls = balls.filter(b => !b.done);
+      tablets = tablets.filter(t => t.hits > 0);
+    }
+
+    function moveShards() {
+      for (const shard of shards) {
+        shard.x += shard.vx;
+        shard.y += shard.vy;
+        shard.vy += 0.3;
+        shard.life--;
+      }
+      shards = shards.filter(s => s.life > 0);
+    }
+
+    function startBoard(newBoard) {
+      board = newBoard;
+      balls = [];
+      shards = [];
+      boardPause = 0;
+      shotCooldown = 0;
+      aim = 0;
+      addTablets();
+
+      bannerText = "Plansza " + (board + 1) + ": " + currentBoard().name;
+      bannerTimer = 110;
+    }
+
+    function resetEverything() {
+      score = 0;
+      shotsFired = 0;
+      shotsHit = 0;
+      gameWon = false;
+      frame = 0;
+      startBoard(0);
+    }
+
+    function checkBoardFinished() {
+      if (tablets.length > 0) {
+        return;
+      }
+
+      if (boardPause === 0) {
+        score += POINTS_PER_BOARD;
+        boardPause = BOARD_PAUSE;
+        bannerText = board === BOARDS.length - 1 ? "Ostatni tablet zbity!" : "Plansza czysta! +" + POINTS_PER_BOARD;
+        bannerTimer = BOARD_PAUSE;
+        return;
+      }
+
+      boardPause--;
+
+      if (boardPause === 0) {
+        if (board === BOARDS.length - 1) {
+          gameWon = true;
+          rememberPlayer(playerName, score);
+        } else {
+          startBoard(board + 1);
+        }
+      }
+    }
+
+    function aimUpDown() {
+      if (keys["ArrowUp"]) {
+        aim = Math.max(AIM_UP, aim - AIM_SPEED);
+      }
+      if (keys["ArrowDown"]) {
+        aim = Math.min(AIM_DOWN, aim + AIM_SPEED);
+      }
+    }
+
+    // ================= GLOWNA PETLA =================
+
+    function update() {
+      if (!running) {
+        return;
+      }
+
+      frame++;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGround();
+
+      if (!gameWon) {
+        aimUpDown();
+
+        if (shotCooldown > 0) {
+          shotCooldown--;
+        }
+
+        moveTablets();
+        moveBalls();
+        checkBoardFinished();
+      }
+
+      moveShards();
+
+      // ---- rysowanie ----
+      drawAimLine();
+      tablets.forEach(drawTablet);
+      balls.forEach(drawBall);
+      drawShards();
+      drawBingo();
+
+      // ---- liczniki ----
+      ctx.fillStyle = "#3E2723";
+      ctx.font = "18px sans-serif";
+      ctx.fillText(playerName, 20, 26);
+      ctx.fillText("Punkty: " + score, 20, 50);
+      ctx.fillText("Celność: " + accuracy() + "%", 20, 74);
+
+      ctx.fillText("Plansza: " + (board + 1) + " / " + BOARDS.length, 600, 26);
+      ctx.fillText("Tabletów: " + tablets.length, 600, 50);
+
+      if (bannerTimer > 0) {
+        bannerTimer--;
+        ctx.fillStyle = "#FF7043";
+        ctx.font = "34px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(bannerText, canvas.width / 2, 120);
+        ctx.textAlign = "left";
+      }
+
+      if (gameWon) {
+        ctx.fillStyle = "#FF7043";
+        ctx.font = "34px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Brawo " + playerName + "! Wszystkie tablety zbite!", canvas.width / 2, 150);
+
+        ctx.fillStyle = "#3E2723";
+        ctx.font = "20px sans-serif";
+        ctx.fillText("Punkty: " + score + "   Celność: " + accuracy() + "%", canvas.width / 2, 186);
+        ctx.font = "18px sans-serif";
+        ctx.fillText("Naciśnij spację, żeby zagrać jeszcze raz", canvas.width / 2, 214);
+        ctx.textAlign = "left";
+      }
+    }
+
+    // ---- Petla: stale 60 krokow gry na sekunde, niezaleznie od ekranu ----
+    let lastTime = 0;
+    let started = false;
+    let leftover = 0;
+
+    function loop(now) {
+      if (!running) {
+        return;
+      }
+
+      requestAnimationFrame(loop);
+
+      if (!started) {
+        started = true;
+        lastTime = now;
+        return;
+      }
+
+      leftover += Math.min(now - lastTime, STEP_MS * MAX_STEPS_PER_FRAME);
+      lastTime = now;
+
+      let steps = 0;
+      while (leftover >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
+        leftover -= STEP_MS;
+        steps++;
+        update();
+      }
+    }
+
+    function startLoop() {
+      started = false;
+      lastTime = 0;
+      leftover = 0;
+      requestAnimationFrame(loop);
+    }
+  </script>
+</body>
+</html>
