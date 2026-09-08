@@ -118,13 +118,14 @@
       }
 
       .touch-button {
-        width: 84px;
+        width: 68px;
         height: 74px;
         margin: 0;
-        font-size: 28px;
+        font-size: 24px;
       }
 
-      #shootButton { width: 130px; font-size: 18px; }
+      #shootButton { width: 118px; font-size: 17px; }
+      #touchControls .pad { gap: 6px; }
 
       #menu {
         margin: 0 auto;
@@ -190,13 +191,17 @@
   <div id="topBar">
     <span id="whoPlays"></span>
     <button id="backButton">Zmień gracza</button>
-    <p>Strzałki &uarr; &darr; = celowanie, SPACJA = strzał</p>
+    <p>Strzałki &larr; &rarr; = chodzenie, &uarr; &darr; = celowanie (przez pion Bingo się obraca), SPACJA = strzał</p>
   </div>
 
   <canvas id="game" width="800" height="400"></canvas>
 
   <!-- ---- Przyciski do grania palcem na telefonie ---- -->
   <div id="touchControls" class="hidden">
+    <div class="pad">
+      <button class="touch-button" id="leftButton">&larr;</button>
+      <button class="touch-button" id="rightButton">&rarr;</button>
+    </div>
     <div class="pad">
       <button class="touch-button" id="upButton">&uarr;</button>
       <button class="touch-button" id="downButton">&darr;</button>
@@ -218,14 +223,25 @@
     const ctx = canvas.getContext("2d");
 
     const GROUND_Y = 360;          // podloga
-    const BINGO_X = 66;            // gdzie stoi Bingo
-    const GUN_X = 104;             // os obrotu lufy
+    const BINGO_START_X = 120;     // gdzie Bingo zaczyna
+    const BINGO_MIN_X = 40;        // i miedzy czym chodzi
+    const BINGO_MAX_X = 760;
+    const WALK_SPEED = 2.6;
+
+    const GUN_OFFSET = 38;         // os obrotu lufy wzgledem Bingo
     const GUN_Y = 286;
     const GUN_LENGTH = 42;
 
-    const AIM_UP = -Math.PI / 3;   // 60 stopni w gore
-    const AIM_DOWN = Math.PI / 3;  // i w dol
-    const AIM_SPEED = 0.035;
+    // Kat lufy jest bezwzgledny: 0 = w prawo, -PI/2 = pionowo w gore, -PI = w lewo.
+    // Trzymajac "w gore" przejezdzamy przez pion i Bingo obraca sie w druga strone,
+    // wiec caly zakres strzalu to polokrag, plus po 20 stopni ponizej poziomu.
+    const AIM_MIN = -Math.PI - 0.35;   // lekko w dol, patrzac w lewo
+    const AIM_MAX = 0.35;              // lekko w dol, patrzac w prawo
+    // Celowanie rusza wolno, zeby dalo sie poprawic o wlos, a przy dluzszym
+    // trzymaniu przyspiesza, zeby przerzucic lufe przez cala plansze.
+    const AIM_SLOW = 0.006;
+    const AIM_FAST = 0.030;
+    const AIM_RAMP = 36;    // po tylu klatkach trzymania osiaga pelna szybkosc
 
     const BALL_SPEED = 9;
     const BALL_RADIUS = 7;
@@ -233,10 +249,10 @@
 
     const TABLET_W = 44;
     const TABLET_H = 60;
-    const TABLET_LEFT = 250;       // blizej Bingo tablety nie podlatuja
+    const TABLET_LEFT = 40;        // tablety lataja nad cala plansza
     const TABLET_RIGHT = 780;
-    const TABLET_TOP = 40;
-    const TABLET_BOTTOM = 330;
+    const TABLET_TOP = 30;
+    const TABLET_BOTTOM = 230;     // zawsze nad glowa Bingo
     const TABLET_WAVE = 52;        // o tyle tablet faluje w gore i w dol na drugiej planszy
 
     const POINTS_PER_TABLET = 10;
@@ -264,7 +280,9 @@
     // ---- Stan gry ----
     let playerName = "";
     let running = false;
-    let aim = 0;                 // kat lufy w radianach
+    let aim = 0;                 // bezwzgledny kat lufy w radianach
+    let aimHold = 0;             // jak dlugo trzymany jest przycisk celowania
+    let bingoX = BINGO_START_X;  // Bingo chodzi w lewo i w prawo
     let balls = [];
     let tablets = [];
     let shards = [];             // odlamki po zbitym tablecie
@@ -281,6 +299,15 @@
 
     function currentBoard() {
       return BOARDS[board];
+    }
+
+    // w prawo, gdy lufa wskazuje w prawo; po przejechaniu przez pion Bingo obraca sie
+    function facing() {
+      return Math.cos(aim) >= 0 ? 1 : -1;
+    }
+
+    function gunX() {
+      return bingoX + GUN_OFFSET * facing();
     }
 
     function accuracy() {
@@ -398,7 +425,7 @@
       shotsFired++;
 
       balls.push({
-        x: GUN_X + Math.cos(aim) * GUN_LENGTH,
+        x: gunX() + Math.cos(aim) * GUN_LENGTH,
         y: GUN_Y + Math.sin(aim) * GUN_LENGTH,
         vx: Math.cos(aim) * BALL_SPEED,
         vy: Math.sin(aim) * BALL_SPEED
@@ -415,7 +442,8 @@
         event.preventDefault();
         shoot();
       }
-      if (event.code === "ArrowUp" || event.code === "ArrowDown") {
+      if (event.code === "ArrowUp" || event.code === "ArrowDown" ||
+          event.code === "ArrowLeft" || event.code === "ArrowRight") {
         event.preventDefault();
       }
     });
@@ -449,6 +477,8 @@
       button.addEventListener("mouseleave", release);
     }
 
+    holdKey(document.getElementById("leftButton"), "ArrowLeft");
+    holdKey(document.getElementById("rightButton"), "ArrowRight");
     holdKey(document.getElementById("upButton"), "ArrowUp");
     holdKey(document.getElementById("downButton"), "ArrowDown");
 
@@ -482,91 +512,164 @@
       }
     }
 
-    // ---- Bingo: pomaranczowa psinka z pistoletem na kulki ----
+    // ---- Bingo: red heeler w kanciastym stylu bajki ----
+    // kremowe: lapy, dlonie, koniec ogona, klatka, pyszczek, brwi
+    // pomaranczowe: nogi, rece, tulow, nasada ogona, wnetrze uszu
+    // ciemnopomaranczowe: plama na grzbiecie, plama na ogonie, boki glowy, uszy z wierzchu
+    const CREAM = "#F7E3C3";
+    const ORANGE = "#E5842F";
+    const DARK_ORANGE = "#B85C1E";
+    const NOSE_BROWN = "#6D4C41";
+
+    function boxPath(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function box(x, y, w, h, r, color) {
+      ctx.fillStyle = color;
+      boxPath(x, y, w, h, r);
+      ctx.fill();
+    }
+
     function drawBingo() {
-      const feetY = GROUND_Y;
-      const bodyTop = feetY - 90;
-
-      // ogon
-      ctx.fillStyle = "#F57C00";
       ctx.save();
-      ctx.translate(BINGO_X - 20, feetY - 62);
-      ctx.rotate(-0.5 + Math.sin(frame / 18) * 0.15);
-      ctx.beginPath();
-      ctx.ellipse(-12, 0, 14, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.translate(bingoX, 0);
+      ctx.scale(facing(), 1);
+      drawBingoBody();
       ctx.restore();
-
-      // nogi
-      ctx.fillStyle = "#EF6C00";
-      ctx.fillRect(BINGO_X - 12, feetY - 26, 10, 26);
-      ctx.fillRect(BINGO_X + 4, feetY - 26, 10, 26);
-
-      // lapki
-      ctx.fillStyle = "#FFE0B2";
-      ctx.fillRect(BINGO_X - 14, feetY - 6, 14, 6);
-      ctx.fillRect(BINGO_X + 2, feetY - 6, 14, 6);
-
-      // tulow
-      ctx.fillStyle = "#FB8C00";
-      ctx.beginPath();
-      ctx.ellipse(BINGO_X, feetY - 52, 22, 30, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // jasny brzuszek
-      ctx.fillStyle = "#FFE0B2";
-      ctx.beginPath();
-      ctx.ellipse(BINGO_X + 8, feetY - 46, 12, 20, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // glowa
-      ctx.fillStyle = "#FB8C00";
-      ctx.beginPath();
-      ctx.ellipse(BINGO_X + 2, bodyTop + 6, 21, 19, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // uszy
-      ctx.fillStyle = "#EF6C00";
-      ctx.beginPath();
-      ctx.moveTo(BINGO_X - 12, bodyTop - 4);
-      ctx.lineTo(BINGO_X - 18, bodyTop - 22);
-      ctx.lineTo(BINGO_X - 1, bodyTop - 9);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(BINGO_X + 10, bodyTop - 6);
-      ctx.lineTo(BINGO_X + 8, bodyTop - 24);
-      ctx.lineTo(BINGO_X + 20, bodyTop - 8);
-      ctx.closePath();
-      ctx.fill();
-
-      // jasny pyszczek
-      ctx.fillStyle = "#FFE0B2";
-      ctx.beginPath();
-      ctx.ellipse(BINGO_X + 16, bodyTop + 12, 12, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // nosek, oko i usmiech
-      ctx.fillStyle = "#3E2723";
-      ctx.beginPath();
-      ctx.ellipse(BINGO_X + 27, bodyTop + 9, 4, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(BINGO_X + 10, bodyTop + 1, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#3E2723";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(BINGO_X + 20, bodyTop + 14, 5, 0.2, Math.PI - 0.5);
-      ctx.stroke();
 
       drawGun();
     }
 
+    function drawBingoBody() {
+      const BINGO_X = 0;   // rysujemy wokol zera; przesuniecie robi transformacja
+      const feetY = GROUND_Y;
+      const bodyBottom = feetY - 26;
+      const bodyTop = bodyBottom - 62;      // tulow
+      const headBottom = bodyTop + 6;
+      const headTop = headBottom - 46;      // glowa
+      const headLeft = BINGO_X - 27;
+      const headW = 56;
+
+      // ---- ogon: pomaranczowa nasada, kremowy koniec, ciemna plama ----
+      ctx.save();
+      ctx.translate(BINGO_X - 24, bodyTop + 22);
+      ctx.rotate(-0.45 + Math.sin(frame / 20) * 0.12);
+      box(-26, -6, 28, 12, 6, ORANGE);
+      box(-36, -6, 14, 12, 6, CREAM);
+      ctx.fillStyle = DARK_ORANGE;
+      ctx.beginPath();
+      ctx.ellipse(-14, 0, 5, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // ---- nogi i lapy ----
+      box(BINGO_X - 18, bodyBottom - 4, 15, 22, 5, ORANGE);
+      box(BINGO_X + 4, bodyBottom - 4, 15, 22, 5, ORANGE);
+      box(BINGO_X - 19, feetY - 9, 17, 9, 4, CREAM);
+      box(BINGO_X + 3, feetY - 9, 17, 9, 4, CREAM);
+
+      // ---- tulow: prostokatny, z kremowa klatka i ciemna plama na grzbiecie ----
+      box(BINGO_X - 24, bodyTop, 46, 62, 12, ORANGE);
+      box(BINGO_X - 2, bodyTop + 14, 22, 40, 9, CREAM);
+
+      ctx.fillStyle = DARK_ORANGE;
+      ctx.beginPath();
+      ctx.ellipse(BINGO_X - 14, bodyTop + 22, 9, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- reka trzymajaca pistolet ----
+      box(BINGO_X + 10, bodyTop + 18, 26, 13, 6, ORANGE);
+
+      // ---- glowa ----
+      box(headLeft, headTop, headW, 46, 14, ORANGE);
+
+      // ciemne boki glowy
+      ctx.fillStyle = DARK_ORANGE;
+      boxPath(headLeft, headTop, 22, 46, 14);
+      ctx.fill();
+      boxPath(headLeft + headW - 14, headTop, 14, 24, 10);
+      ctx.fill();
+
+      // ---- uszy: ciemne z wierzchu, pomaranczowe w srodku ----
+      ctx.fillStyle = DARK_ORANGE;
+      ctx.beginPath();
+      ctx.moveTo(headLeft + 4, headTop + 10);
+      ctx.lineTo(headLeft - 2, headTop - 18);
+      ctx.lineTo(headLeft + 22, headTop + 4);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(headLeft + 30, headTop + 4);
+      ctx.lineTo(headLeft + 34, headTop - 19);
+      ctx.lineTo(headLeft + 48, headTop + 6);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = ORANGE;
+      ctx.beginPath();
+      ctx.moveTo(headLeft + 7, headTop + 7);
+      ctx.lineTo(headLeft + 3, headTop - 10);
+      ctx.lineTo(headLeft + 17, headTop + 3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(headLeft + 33, headTop + 3);
+      ctx.lineTo(headLeft + 35, headTop - 11);
+      ctx.lineTo(headLeft + 44, headTop + 5);
+      ctx.closePath();
+      ctx.fill();
+
+      // ---- kremowy pyszczek ----
+      box(headLeft + 24, headTop + 20, 36, 22, 10, CREAM);
+
+      // nos
+      ctx.fillStyle = NOSE_BROWN;
+      boxPath(headLeft + 52, headTop + 22, 12, 10, 4);
+      ctx.fill();
+
+      // usmiech
+      ctx.strokeStyle = NOSE_BROWN;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(headLeft + 52, headTop + 34);
+      ctx.lineTo(headLeft + 44, headTop + 37);
+      ctx.stroke();
+
+      // ---- oczy: biale kola z czarna zrenica ----
+      const eyes = [[headLeft + 27, headTop + 16], [headLeft + 43, headTop + 15]];
+      for (const [ex, ey] of eyes) {
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#2E2E2E";
+        ctx.beginPath();
+        ctx.arc(ex + 2, ey + 1, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ---- kremowe brwi ----
+      ctx.fillStyle = CREAM;
+      box(headLeft + 20, headTop + 5, 14, 5, 2, CREAM);
+      box(headLeft + 37, headTop + 4, 13, 5, 2, CREAM);
+    }
+
     function drawGun() {
       ctx.save();
-      ctx.translate(GUN_X, GUN_Y);
+      ctx.translate(gunX(), GUN_Y);
       ctx.rotate(aim);
 
       // lufa
@@ -594,16 +697,16 @@
 
       ctx.restore();
 
-      // lapki trzymajace lufe
-      ctx.fillStyle = "#FFE0B2";
+      // kremowa dlon na lufie
+      ctx.fillStyle = CREAM;
       ctx.beginPath();
-      ctx.arc(GUN_X + 2, GUN_Y + 2, 7, 0, Math.PI * 2);
+      ctx.arc(gunX(), GUN_Y + 2, 8, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // ---- Kropkowana linia celowania ----
     function drawAimLine() {
-      const startX = GUN_X + Math.cos(aim) * (GUN_LENGTH + 4);
+      const startX = gunX() + Math.cos(aim) * (GUN_LENGTH + 4);
       const startY = GUN_Y + Math.sin(aim) * (GUN_LENGTH + 4);
 
       ctx.strokeStyle = "rgba(255, 112, 67, 0.55)";
@@ -801,6 +904,8 @@
       boardPause = 0;
       shotCooldown = 0;
       aim = 0;
+      aimHold = 0;
+      bingoX = BINGO_START_X;
       addTablets();
 
       bannerText = "Plansza " + (board + 1) + ": " + currentBoard().name;
@@ -841,12 +946,36 @@
       }
     }
 
+    function aimSpeed() {
+      return AIM_SLOW + (AIM_FAST - AIM_SLOW) * (aimHold / AIM_RAMP);
+    }
+
     function aimUpDown() {
-      if (keys["ArrowUp"]) {
-        aim = Math.max(AIM_UP, aim - AIM_SPEED);
+      const up = keys["ArrowUp"];
+      const down = keys["ArrowDown"];
+
+      if (!up && !down) {
+        aimHold = 0;   // po puszczeniu znowu zaczynamy od najwolniejszego ruchu
+        return;
       }
-      if (keys["ArrowDown"]) {
-        aim = Math.min(AIM_DOWN, aim + AIM_SPEED);
+
+      aimHold = Math.min(AIM_RAMP, aimHold + 1);
+      const speed = aimSpeed();
+
+      if (up) {
+        aim = Math.max(AIM_MIN, aim - speed);
+      }
+      if (down) {
+        aim = Math.min(AIM_MAX, aim + speed);
+      }
+    }
+
+    function walk() {
+      if (keys["ArrowLeft"]) {
+        bingoX = Math.max(BINGO_MIN_X, bingoX - WALK_SPEED);
+      }
+      if (keys["ArrowRight"]) {
+        bingoX = Math.min(BINGO_MAX_X, bingoX + WALK_SPEED);
       }
     }
 
@@ -863,6 +992,7 @@
 
       if (!gameWon) {
         aimUpDown();
+        walk();
 
         if (shotCooldown > 0) {
           shotCooldown--;
